@@ -1,4 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:senior_project_flutter_app/screens/home_map_page.dart';
+import 'location_setup_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/supabase_service.dart';
+import 'home_map_page.dart';
+
+
 
 class SignupPage extends StatefulWidget {
   const SignupPage({super.key});
@@ -9,6 +16,85 @@ class SignupPage extends StatefulWidget {
 
 class _SignupPageState extends State<SignupPage> {
   bool hidePassword = true;
+  bool isLoading = false;
+  
+  late TextEditingController usernameController;
+  late TextEditingController emailController;
+  late TextEditingController passwordController;
+
+  @override
+  void initState() {
+    super.initState();
+    usernameController = TextEditingController();
+    emailController = TextEditingController();
+    passwordController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    usernameController.dispose();
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleSignup() async {
+    final username = usernameController.text.trim();
+    final email = emailController.text.trim();
+    final password = passwordController.text.trim();
+
+    // Validation
+    if (username.isEmpty || email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill in all fields')),
+      );
+      return;
+    }
+
+    if (password.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password must be at least 6 characters')),
+      );
+      return;
+    }
+
+    setState(() => isLoading = true);
+
+    try {
+      // Use SupabaseService to handle signup
+      await SupabaseService().signUp(
+        email: email,
+        password: password,
+        username: username,
+      );
+
+      if (!mounted) return;
+
+      // Navigate to next screen on success
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const HomeMapPage()),
+      );
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sign up successful!')),
+      );
+    } on AuthException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Auth error: ${error.message}')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Sign up failed: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -80,6 +166,7 @@ class _SignupPageState extends State<SignupPage> {
                     _LabeledField(
                       label: 'User name',
                       child: TextField(
+                        controller: usernameController,
                         decoration: _inputDecoration('Bob'),
                       ),
                     ),
@@ -87,6 +174,7 @@ class _SignupPageState extends State<SignupPage> {
                     _LabeledField(
                       label: 'Email',
                       child: TextField(
+                        controller: emailController,
                         keyboardType: TextInputType.emailAddress,
                         decoration: _inputDecoration('Bob@gmail.com'),
                       ),
@@ -95,6 +183,7 @@ class _SignupPageState extends State<SignupPage> {
                     _LabeledField(
                       label: 'Password',
                       child: TextField(
+                        controller: passwordController,
                         obscureText: hidePassword,
                         decoration: _inputDecoration(
                           '••••••••',
@@ -123,15 +212,20 @@ class _SignupPageState extends State<SignupPage> {
                             borderRadius: BorderRadius.circular(10),
                           ),
                         ),
-                        onPressed: () {
-                           Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(builder: (_) => const LocationSetupScreen()),
-                        },
-                        child: const Text(
-                          'Sign up',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                        ),
+                        onPressed: isLoading ? null : _handleSignup,
+                        child: isLoading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                            : const Text(
+                                'Sign up',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                              ),
                       ),
                     ),
                   ],
