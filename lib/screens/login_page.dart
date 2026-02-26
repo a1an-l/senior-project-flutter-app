@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'signup_page.dart';
+import 'home_map_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -138,7 +139,12 @@ class _LoginPageState extends State<LoginPage> {
                             borderRadius: BorderRadius.circular(10),
                           ),
                         ),
-                        onPressed: () {},
+                        onPressed: () {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(builder: (_) => const HomeMapPage()),
+                          );
+                        },
                         child: const Text(
                           'Log in',
                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
@@ -185,7 +191,12 @@ class _LoginPageState extends State<LoginPage> {
                             borderRadius: BorderRadius.circular(10),
                           ),
                         ),
-                        onPressed: () {},
+                        onPressed: () {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(builder: (_) => const HomeMapPage()),
+                          );
+                        },
                         child: const Text(
                           'Continue as a Guest',
                           style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
