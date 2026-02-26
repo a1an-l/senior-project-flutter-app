@@ -123,7 +123,11 @@ class _SignupPageState extends State<SignupPage> {
                             borderRadius: BorderRadius.circular(10),
                           ),
                         ),
-                        onPressed: () {},
+                        onPressed: () {
+                           Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(builder: (_) => const LocationSetupScreen()),
+                        },
                         child: const Text(
                           'Sign up',
                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
