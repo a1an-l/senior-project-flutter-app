@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'home_map_page.dart';
+import 'location_input_page.dart';
+
 
 class LocationSetupScreen extends StatelessWidget {
   const LocationSetupScreen({super.key});
@@ -183,7 +185,17 @@ class _LocationItem extends StatelessWidget {
         ],
       ),
       child: InkWell(
-        onTap: () {},
+        onTap: () {
+           Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => LocationInputPage(
+                title: label,
+                placeholder: 'Enter $label address',
+              ),
+            ),
+          );
+        },
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
