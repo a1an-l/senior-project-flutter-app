@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'signup_page.dart';
 import 'home_map_page.dart';
 import 'location_setup_screen.dart';
-
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -12,8 +12,62 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  // 1. Controllers to capture user input
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  
+  // 2. State variables for loading and errors
+  bool _isLoading = false;
+  String? _errorMessage; 
+  
   bool rememberMe = false;
   bool hidePassword = true;
+
+  // 3. Supabase Login Logic for custom 'users' table
+  Future<void> _handleLogin() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      // Query the 'users' table for a matching email and password
+      final data = await Supabase.instance.client
+          .from('users')
+          .select()
+          .eq('email', _emailController.text.trim())
+          .eq('password', _passwordController.text.trim())
+          .maybeSingle(); // maybeSingle returns null if no match is found
+
+      if (data != null) {
+        // Success: Transition to home page
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const HomeMapPage()),
+          );
+        }
+      } else {
+        // Failure: Show error message
+        setState(() {
+          _errorMessage = "Email and password do not match our records.";
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = "An unexpected error occurred. Please try again.";
+      });
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +107,7 @@ class _LoginPageState extends State<LoginPage> {
                         color: Color(0xFFE9E9E9),
                         shape: BoxShape.circle,
                       ),
+                      child: const Icon(Icons.person, size: 40, color: Colors.grey),
                     ),
                     const SizedBox(height: 18),
                     const Text(
@@ -66,9 +121,21 @@ class _LoginPageState extends State<LoginPage> {
                       style: TextStyle(fontSize: 12, color: Color(0xFF8A8A8A)),
                     ),
                     const SizedBox(height: 18),
+
+                    // 4. Display Error Message if it exists
+                    if (_errorMessage != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Text(
+                          _errorMessage!,
+                          style: const TextStyle(color: Colors.red, fontSize: 13, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+
                     _LabeledField(
                       label: 'Email',
                       child: TextField(
+                        controller: _emailController, // Added controller
                         keyboardType: TextInputType.emailAddress,
                         decoration: _inputDecoration('bob@gmail.com'),
                       ),
@@ -77,6 +144,7 @@ class _LoginPageState extends State<LoginPage> {
                     _LabeledField(
                       label: 'Password',
                       child: TextField(
+                        controller: _passwordController, // Added controller
                         obscureText: hidePassword,
                         decoration: _inputDecoration(
                           '••••••••',
@@ -130,6 +198,8 @@ class _LoginPageState extends State<LoginPage> {
                       ],
                     ),
                     const SizedBox(height: 14),
+                    
+                    // 5. Updated Log in Button with Loading Spinner
                     SizedBox(
                       width: double.infinity,
                       height: 44,
@@ -141,16 +211,17 @@ class _LoginPageState extends State<LoginPage> {
                             borderRadius: BorderRadius.circular(10),
                           ),
                         ),
-                        onPressed: () {
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(builder: (_) => const HomeMapPage()),
-                          );
-                        },
-                        child: const Text(
-                          'Log in',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                        ),
+                        onPressed: _isLoading ? null : _handleLogin,
+                        child: _isLoading 
+                          ? const SizedBox(
+                              width: 20, 
+                              height: 20, 
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                            )
+                          : const Text(
+                              'Log in',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                            ),
                       ),
                     ),
                     const SizedBox(height: 8),
