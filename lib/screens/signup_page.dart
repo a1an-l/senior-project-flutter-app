@@ -63,9 +63,9 @@ class _SignupPageState extends State<SignupPage> {
     try {
       // Use SupabaseService to handle signup
       await SupabaseService().signUp(
-        email: email,
-        password: password,
         username: username,
+        email: email,
+        password: password
       );
 
       if (!mounted) return;
@@ -73,7 +73,7 @@ class _SignupPageState extends State<SignupPage> {
       // Navigate to next screen on success
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const HomeMapPage()),
+        MaterialPageRoute(builder: (_) => const LocationSetupScreen()),
       );
       
       ScaffoldMessenger.of(context).showSnackBar(
