@@ -33,7 +33,8 @@ class SupabaseService {
       await client.from('users').insert({
         'email': email,
         'username': username,
-        'created_at': DateTime.now().toIso8601String(),
+        'password': password,
+        'created_at': DateTime.now().toIso8601String()
       });
     } catch (e) {
       rethrow;

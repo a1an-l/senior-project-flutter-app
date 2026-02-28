@@ -3,7 +3,8 @@ import 'package:senior_project_flutter_app/screens/home_map_page.dart';
 import 'location_setup_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/supabase_service.dart';
-import 'home_map_page.dart';
+import 'package:crypto/crypto.dart';
+import 'dart:convert';
 
 
 
@@ -58,14 +59,20 @@ class _SignupPageState extends State<SignupPage> {
       return;
     }
 
+    // DEBUGGING 
+    // print('DEBUG - Pre-hashed password: $password');
+    // Hashing
+    final hashedPassword = sha256.convert(utf8.encode(password)).toString();
+    //print('DEBUG - Hashed password: $hashedPassword');
+
     setState(() => isLoading = true);
 
     try {
       // Use SupabaseService to handle signup
       await SupabaseService().signUp(
-        username: username,
         email: email,
-        password: password
+        password: hashedPassword,
+        username: username
       );
 
       if (!mounted) return;
