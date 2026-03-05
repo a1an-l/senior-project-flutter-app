@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:senior_project_flutter_app/screens/home_map_page.dart';
 import 'location_setup_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/supabase_service.dart';

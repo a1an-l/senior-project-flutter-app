@@ -176,13 +176,13 @@ class _LocationItem extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.07),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
+          boxShadow: [
+            BoxShadow(
+              color: const Color.fromRGBO(0, 0, 0, 0.07),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
       ),
       child: InkWell(
         onTap: () {
