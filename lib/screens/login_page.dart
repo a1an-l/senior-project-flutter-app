@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'signup_page.dart';
 import 'home_map_page.dart';
-import 'location_setup_screen.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
