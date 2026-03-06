@@ -13,7 +13,7 @@ class MainActivity : FlutterActivity() {
     MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
       .setMethodCallHandler { call, result ->
         when (call.method) {
-          "googleMapsWebApiKey" -> result.success(BuildConfig.GOOGLE_MAPS_WEB_API_KEY)
+          "mapsApiKey" -> result.success(BuildConfig.MAPS_API_KEY)
           else -> result.notImplemented()
         }
       }

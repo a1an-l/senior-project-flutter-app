@@ -15,7 +15,6 @@ val localProperties = Properties().apply {
 }
 
 val mapsApiKey = localProperties.getProperty("MAPS_API_KEY") ?: ""
-val googleMapsWebApiKey = localProperties.getProperty("GOOGLE_MAPS_WEB_API_KEY") ?: ""
 
 android {
     namespace = "com.example.senior_project_flutter_app"
@@ -47,11 +46,7 @@ android {
 
         manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
 
-        buildConfigField(
-            "String",
-            "GOOGLE_MAPS_WEB_API_KEY",
-            "\"$googleMapsWebApiKey\"",
-        )
+        buildConfigField("String", "MAPS_API_KEY", "\"$mapsApiKey\"")
     }
 
     buildTypes {

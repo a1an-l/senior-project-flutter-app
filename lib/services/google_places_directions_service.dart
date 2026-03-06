@@ -81,10 +81,13 @@ class GooglePlacesDirectionsService {
     required double destLat,
     required double destLng,
   }) async {
+    final departureTime = (DateTime.now().millisecondsSinceEpoch / 1000).round();
     final uri = Uri.https('maps.googleapis.com', '/maps/api/directions/json', {
       'origin': '$originLat,$originLng',
       'destination': '$destLat,$destLng',
       'mode': 'driving',
+      'departure_time': departureTime.toString(),
+      'traffic_model': 'best_guess',
       'key': apiKey,
     });
 
@@ -106,7 +109,35 @@ class GooglePlacesDirectionsService {
 
     final overviewPolyline = routes.first['overview_polyline'] as Map<String, dynamic>;
     final points = overviewPolyline['points'] as String;
-    return DirectionsResult(polylinePoints: decodePolyline(points));
+    final legs = (routes.first['legs'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
+    final firstLeg = legs.isNotEmpty ? legs.first : null;
+
+    String? distanceText;
+    String? durationText;
+    String? durationInTrafficText;
+    int? durationSeconds;
+    int? durationInTrafficSeconds;
+
+    if (firstLeg != null) {
+      final distance = firstLeg['distance'] as Map<String, dynamic>?;
+      final duration = firstLeg['duration'] as Map<String, dynamic>?;
+      final durationInTraffic = firstLeg['duration_in_traffic'] as Map<String, dynamic>?;
+
+      distanceText = distance?['text'] as String?;
+      durationText = duration?['text'] as String?;
+      durationSeconds = (duration?['value'] as num?)?.toInt();
+      durationInTrafficText = durationInTraffic?['text'] as String?;
+      durationInTrafficSeconds = (durationInTraffic?['value'] as num?)?.toInt();
+    }
+
+    return DirectionsResult(
+      polylinePoints: decodePolyline(points),
+      distanceText: distanceText,
+      durationText: durationText,
+      durationInTrafficText: durationInTrafficText,
+      durationSeconds: durationSeconds,
+      durationInTrafficSeconds: durationInTrafficSeconds,
+    );
   }
 }
 
@@ -134,9 +165,21 @@ class PlaceDetails {
 }
 
 class DirectionsResult {
-  DirectionsResult({required this.polylinePoints});
+  DirectionsResult({
+    required this.polylinePoints,
+    required this.distanceText,
+    required this.durationText,
+    required this.durationInTrafficText,
+    required this.durationSeconds,
+    required this.durationInTrafficSeconds,
+  });
 
   final List<List<double>> polylinePoints;
+  final String? distanceText;
+  final String? durationText;
+  final String? durationInTrafficText;
+  final int? durationSeconds;
+  final int? durationInTrafficSeconds;
 }
 
 List<List<double>> decodePolyline(String encoded) {

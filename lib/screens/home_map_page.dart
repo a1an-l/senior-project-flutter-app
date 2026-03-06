@@ -20,7 +20,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
   Position? currentPosition;
   StreamSubscription<Position>? positionSubscription;
   bool followUser = true;
-  String? googleMapsWebApiKey;
+  String? mapsApiKey;
 
   final TextEditingController searchController = TextEditingController();
   final FocusNode searchFocusNode = FocusNode();
@@ -28,6 +28,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
   bool searching = false;
   PlaceDetails? selectedPlace;
   String sessionToken = DateTime.now().millisecondsSinceEpoch.toString();
+  DirectionsResult? selectedDirections;
 
   Set<Marker> markers = {};
   Set<Polyline> polylines = {};
@@ -41,16 +42,16 @@ class _HomeMapPageState extends State<HomeMapPage> {
   void initState() {
     super.initState();
     _initLocation();
-    _loadWebKey();
+    _loadApiKey();
     searchController.addListener(_onSearchChanged);
   }
 
-  Future<void> _loadWebKey() async {
-    final key = await ApiKeys.googleMapsWebApiKey();
+  Future<void> _loadApiKey() async {
+    final key = await ApiKeys.mapsApiKey();
     if (!mounted) {
       return;
     }
-    setState(() => googleMapsWebApiKey = key);
+    setState(() => mapsApiKey = key);
   }
 
   @override
@@ -62,7 +63,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
   }
 
   GooglePlacesDirectionsService? get googleService {
-    final apiKey = googleMapsWebApiKey;
+    final apiKey = mapsApiKey;
     if (apiKey == null || apiKey.isEmpty) {
       return null;
     }
@@ -179,6 +180,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
       suggestions = [];
       searching = true;
       selectedPlace = null;
+      selectedDirections = null;
       polylines = {};
       markers = {};
     });
@@ -235,6 +237,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
 
     setState(() {
       selectedPlace = details;
+      selectedDirections = directions;
       markers = newMarkers;
       polylines = newPolylines;
       searching = false;
@@ -402,6 +405,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
                                   searchController.clear();
                                   suggestions = [];
                                   selectedPlace = null;
+                                  selectedDirections = null;
                                   polylines = {};
                                   markers = {};
                                 });
@@ -450,6 +454,64 @@ class _HomeMapPageState extends State<HomeMapPage> {
               ),
             ),
           ),
+          if (selectedPlace != null)
+            SafeArea(
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 86),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFE5E5E5)),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x14000000),
+                          blurRadius: 12,
+                          offset: Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                selectedPlace!.name.isEmpty
+                                    ? selectedPlace!.formattedAddress
+                                    : selectedPlace!.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                              ),
+                              const SizedBox(height: 6),
+                              _RouteInfoRow(directions: selectedDirections),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        IconButton(
+                          onPressed: () {
+                            setState(() {
+                              selectedPlace = null;
+                              selectedDirections = null;
+                              polylines = {};
+                              markers = {};
+                            });
+                          },
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
       bottomNavigationBar: BottomAppBar(
@@ -549,6 +611,68 @@ class _BottomItem extends StatelessWidget {
           const SizedBox(height: 2),
           Text(label, style: TextStyle(fontSize: 11, color: color)),
         ],
+      ),
+    );
+  }
+}
+
+class _RouteInfoRow extends StatelessWidget {
+  const _RouteInfoRow({required this.directions});
+
+  final DirectionsResult? directions;
+
+  @override
+  Widget build(BuildContext context) {
+    final distance = directions?.distanceText;
+    final duration = directions?.durationText;
+    final durationTraffic = directions?.durationInTrafficText;
+    final durationSeconds = directions?.durationSeconds;
+    final durationTrafficSeconds = directions?.durationInTrafficSeconds;
+
+    final bool hasTrafficDelay =
+        durationSeconds != null && durationTrafficSeconds != null && durationTrafficSeconds > durationSeconds;
+
+    final parts = <Widget>[];
+
+    if (distance != null && distance.isNotEmpty) {
+      parts.add(_pill(text: distance, color: const Color(0xFFF4F4F4), textColor: Colors.black87));
+    }
+
+    final effectiveDuration = (durationTraffic != null && durationTraffic.isNotEmpty) ? durationTraffic : duration;
+    if (effectiveDuration != null && effectiveDuration.isNotEmpty) {
+      parts.add(
+        _pill(
+          text: effectiveDuration,
+          color: hasTrafficDelay ? const Color(0xFFFFEBEE) : const Color(0xFFEAF1FF),
+          textColor: hasTrafficDelay ? const Color(0xFFC62828) : const Color(0xFF2F5CE5),
+        ),
+      );
+    }
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: parts.isEmpty
+          ? [
+              const Text(
+                'Directions unavailable',
+                style: TextStyle(fontSize: 12, color: Color(0xFF8A8A8A)),
+              ),
+            ]
+          : parts,
+    );
+  }
+
+  Widget _pill({required String text, required Color color, required Color textColor}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textColor),
       ),
     );
   }
