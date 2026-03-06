@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'location_input_page.dart';
-
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_keys.dart';
 import '../services/google_places_directions_service.dart';
+import '../services/saved_places.dart';
+
+import 'location_input_page.dart';
 
 class HomeMapPage extends StatefulWidget {
   const HomeMapPage({super.key});
@@ -30,6 +32,8 @@ class _HomeMapPageState extends State<HomeMapPage> {
   PlaceDetails? selectedPlace;
   String sessionToken = DateTime.now().millisecondsSinceEpoch.toString();
   DirectionsResult? selectedDirections;
+  List<String> recentSearches = [];
+  bool searchExpanded = false;
 
   Set<Marker> markers = {};
   Set<Polyline> polylines = {};
@@ -44,7 +48,19 @@ class _HomeMapPageState extends State<HomeMapPage> {
     super.initState();
     _initLocation();
     _loadApiKey();
+    _loadRecentSearches();
     searchController.addListener(_onSearchChanged);
+    searchFocusNode.addListener(() {
+      if (mounted) {
+        setState(() {
+          if (searchFocusNode.hasFocus) {
+            searchExpanded = true;
+          } else {
+            searchExpanded = false;
+          }
+        });
+      }
+    });
   }
 
   Future<void> _loadApiKey() async {
@@ -61,6 +77,32 @@ class _HomeMapPageState extends State<HomeMapPage> {
     searchController.dispose();
     searchFocusNode.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadRecentSearches() async {
+    final prefs = await SharedPreferences.getInstance();
+    final values = prefs.getStringList('recent_searches') ?? [];
+    if (!mounted) {
+      return;
+    }
+    setState(() => recentSearches = values);
+  }
+
+  Future<void> _addRecentSearch(String value) async {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return;
+    }
+
+    final next = <String>[trimmed, ...recentSearches.where((e) => e != trimmed)];
+    final capped = next.length > 6 ? next.sublist(0, 6) : next;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('recent_searches', capped);
+    if (!mounted) {
+      return;
+    }
+    setState(() => recentSearches = capped);
   }
 
   GooglePlacesDirectionsService? get googleService {
@@ -178,6 +220,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
 
     searchFocusNode.unfocus();
     setState(() {
+      searchExpanded = false;
       suggestions = [];
       searching = true;
       selectedPlace = null;
@@ -245,6 +288,137 @@ class _HomeMapPageState extends State<HomeMapPage> {
       searchController.text = details.name.isEmpty ? suggestion.description : details.name;
       sessionToken = DateTime.now().millisecondsSinceEpoch.toString();
     });
+
+    await _addRecentSearch(suggestion.description);
+  }
+
+  Future<void> _routeToSavedLabel(String label) async {
+    final saved = await SavedPlacesStore.get(label);
+    if (!mounted) {
+      return;
+    }
+
+    if (saved == null) {
+      final result = await Navigator.push<SavedPlace>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => LocationInputPage(
+            title: label,
+            placeholder: 'Enter $label address',
+          ),
+        ),
+      );
+
+      if (!mounted || result == null) {
+        return;
+      }
+
+      await _routeToPlace(result);
+      return;
+    }
+
+    await _routeToPlace(saved);
+  }
+
+  Future<void> _routeToPlace(SavedPlace place) async {
+    final origin = currentPosition;
+    final service = googleService;
+    if (origin == null || service == null) {
+      return;
+    }
+
+    setState(() {
+      searching = true;
+      selectedPlace = PlaceDetails(
+        placeId: place.placeId,
+        name: place.name,
+        formattedAddress: place.address,
+        lat: place.lat,
+        lng: place.lng,
+      );
+      selectedDirections = null;
+      polylines = {};
+      markers = {};
+    });
+
+    final directions = await service.directions(
+      originLat: origin.latitude,
+      originLng: origin.longitude,
+      destLat: place.lat,
+      destLng: place.lng,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    final destLatLng = LatLng(place.lat, place.lng);
+    final newMarkers = <Marker>{
+      Marker(
+        markerId: MarkerId('saved_${place.label.toLowerCase()}'),
+        position: destLatLng,
+        infoWindow: InfoWindow(title: place.name),
+      ),
+    };
+
+    final newPolylines = <Polyline>{};
+    if (directions != null) {
+      final points = directions.polylinePoints
+          .map((p) => LatLng(p[0], p[1]))
+          .toList(growable: false);
+      newPolylines.add(
+        Polyline(
+          polylineId: const PolylineId('route'),
+          points: points,
+          width: 5,
+          color: const Color(0xFF2F5CE5),
+        ),
+      );
+
+      final bounds = _boundsFor(points);
+      await controller?.animateCamera(
+        CameraUpdate.newLatLngBounds(bounds, 70),
+      );
+    } else {
+      await controller?.animateCamera(CameraUpdate.newLatLngZoom(destLatLng, 14));
+    }
+
+    setState(() {
+      selectedDirections = directions;
+      markers = newMarkers;
+      polylines = newPolylines;
+      searching = false;
+      searchController.text = place.name;
+    });
+  }
+
+  Future<void> _selectRecentSearch(String query) async {
+    final service = googleService;
+    if (service == null) {
+      return;
+    }
+
+    setState(() {
+      searching = true;
+      suggestions = [];
+    });
+
+    final results = await service.autocomplete(
+      input: query,
+      sessionToken: sessionToken,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() => searching = false);
+
+    if (results.isEmpty) {
+      return;
+    }
+
+    await _selectSuggestion(results.first);
   }
 
   LatLngBounds _boundsFor(List<LatLng> points) {
@@ -314,6 +488,9 @@ class _HomeMapPageState extends State<HomeMapPage> {
             markers: markers,
             polylines: polylines,
             onCameraMoveStarted: () => followUser = false,
+            onTap: (_) {
+              FocusScope.of(context).unfocus();
+            },
             onMapCreated: (value) {
               controller = value;
               if (myLocationEnabled) {
@@ -321,6 +498,16 @@ class _HomeMapPageState extends State<HomeMapPage> {
               }
             },
           ),
+          if (searchExpanded)
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: () {
+                  FocusScope.of(context).unfocus();
+                  setState(() => searchExpanded = false);
+                },
+              ),
+            ),
           SafeArea(
             child: Align(
               alignment: Alignment.topCenter,
@@ -334,47 +521,123 @@ class _HomeMapPageState extends State<HomeMapPage> {
                       label: 'Home',
                       icon: Icons.home_outlined,
                       onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const LocationInputPage(
-                              title: 'Home',
-                              placeholder: 'Enter your home address',
-                            ),
-                          ),
-                        );
+                        _routeToSavedLabel('Home');
                       },
                     ),
                     const SizedBox(width: 8),
                     _TopChip(
                       label: 'Work',
                       icon: Icons.work_outline,
-                      onPressed: () {},
+                      onPressed: () {
+                        _routeToSavedLabel('Work');
+                      },
                     ),
                     const SizedBox(width: 8),
                     _TopChip(
                       label: 'New',
                       icon: Icons.add,
-                      onPressed: () {},
+                      onPressed: () {
+                        setState(() => searchExpanded = true);
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) {
+                            FocusScope.of(context).requestFocus(searchFocusNode);
+                          }
+                        });
+                      },
                     ),
                   ],
                 ),
               ),
             ),
           ),
-          SafeArea(
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 62, 16, 0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            left: 16,
+            right: 16,
+            top: searchExpanded ? 62 : null,
+            bottom: searchExpanded ? null : 10,
+            child: SafeArea(
+              top: searchExpanded,
+              bottom: !searchExpanded,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(color: const Color(0xFFE5E5E5)),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x14000000),
+                          blurRadius: 10,
+                          offset: Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        const SizedBox(width: 10),
+                        const Icon(Icons.search, size: 18, color: Color(0xFF8A8A8A)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: searchController,
+                            focusNode: searchFocusNode,
+                            readOnly: !searchExpanded,
+                            onTap: () {
+                              if (!searchExpanded) {
+                                setState(() => searchExpanded = true);
+                                WidgetsBinding.instance.addPostFrameCallback((_) {
+                                  if (mounted) {
+                                    FocusScope.of(context).requestFocus(searchFocusNode);
+                                  }
+                                });
+                              }
+                            },
+                            decoration: const InputDecoration(
+                              hintText: 'Search',
+                              border: InputBorder.none,
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                        if (searching)
+                          const SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: Padding(
+                              padding: EdgeInsets.all(6),
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        else if (searchExpanded && searchController.text.isNotEmpty)
+                          IconButton(
+                            onPressed: () {
+                              setState(() {
+                                searchController.clear();
+                                suggestions = [];
+                                selectedPlace = null;
+                                selectedDirections = null;
+                                polylines = {};
+                                markers = {};
+                              });
+                            },
+                            icon: const Icon(Icons.close, size: 18),
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (searchExpanded &&
+                      (suggestions.isNotEmpty ||
+                          (searchController.text.isEmpty && recentSearches.isNotEmpty)))
                     Container(
-                      height: 40,
+                      margin: const EdgeInsets.only(top: 8),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: const Color(0xFFE5E5E5)),
                         boxShadow: const [
                           BoxShadow(
@@ -384,84 +647,66 @@ class _HomeMapPageState extends State<HomeMapPage> {
                           ),
                         ],
                       ),
-                      child: Row(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          const SizedBox(width: 10),
-                          const Icon(Icons.search, size: 18, color: Color(0xFF8A8A8A)),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              controller: searchController,
-                              focusNode: searchFocusNode,
-                              decoration: const InputDecoration(
-                                hintText: 'Search',
-                                border: InputBorder.none,
-                                isDense: true,
+                          if (searchController.text.isEmpty && recentSearches.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+                              child: Row(
+                                children: const [
+                                  Text(
+                                    'Recent',
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                                  ),
+                                ],
                               ),
                             ),
-                          ),
-                          if (searching)
-                            const SizedBox(
-                              width: 28,
-                              height: 28,
-                              child: Padding(
-                                padding: EdgeInsets.all(6),
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              ),
-                            )
-                          else if (searchController.text.isNotEmpty)
-                            IconButton(
-                              onPressed: () {
-                                setState(() {
-                                  searchController.clear();
-                                  suggestions = [];
-                                  selectedPlace = null;
-                                  selectedDirections = null;
-                                  polylines = {};
-                                  markers = {};
-                                });
+                          if (searchController.text.isEmpty && recentSearches.isNotEmpty)
+                            ListView.separated(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: recentSearches.length,
+                              separatorBuilder: (context, index) => const Divider(height: 1),
+                              itemBuilder: (context, index) {
+                                final value = recentSearches[index];
+                                return ListTile(
+                                  dense: true,
+                                  leading: const Icon(Icons.history, size: 18, color: Color(0xFF8A8A8A)),
+                                  title: Text(
+                                    value,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
+                                  onTap: () => _selectRecentSearch(value),
+                                );
                               },
-                              icon: const Icon(Icons.close, size: 18),
+                            )
+                          else
+                            ListView.separated(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: suggestions.length > 6 ? 6 : suggestions.length,
+                              separatorBuilder: (context, index) => const Divider(height: 1),
+                              itemBuilder: (context, index) {
+                                final s = suggestions[index];
+                                return ListTile(
+                                  dense: true,
+                                  title: Text(
+                                    s.description,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
+                                  onTap: () => _selectSuggestion(s),
+                                );
+                              },
                             ),
                         ],
                       ),
                     ),
-                    if (suggestions.isNotEmpty)
-                      Container(
-                        margin: const EdgeInsets.only(top: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFFE5E5E5)),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x14000000),
-                              blurRadius: 10,
-                              offset: Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: ListView.separated(
-                          shrinkWrap: true,
-                          itemCount: suggestions.length > 6 ? 6 : suggestions.length,
-                          separatorBuilder: (context, index) => const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            final s = suggestions[index];
-                            return ListTile(
-                              dense: true,
-                              title: Text(
-                                s.description,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 13),
-                              ),
-                              onTap: () => _selectSuggestion(s),
-                            );
-                          },
-                        ),
-                      ),
-                  ],
-                ),
+                ],
               ),
             ),
           ),
@@ -509,6 +754,8 @@ class _HomeMapPageState extends State<HomeMapPage> {
                         IconButton(
                           onPressed: () {
                             setState(() {
+                              searchController.clear();
+                              suggestions = [];
                               selectedPlace = null;
                               selectedDirections = null;
                               polylines = {};
@@ -574,18 +821,18 @@ class _TopChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return OutlinedButton.icon(
       onPressed: onPressed,
-      icon: Icon(icon, size: 16),
+      icon: Icon(icon, size: 18),
       label: Text(
         label,
-        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
       ),
       style: OutlinedButton.styleFrom(
         foregroundColor: Colors.black87,
         backgroundColor: Colors.white,
         side: const BorderSide(color: Color(0xFFE5E5E5)),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        minimumSize: const Size(0, 34),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        minimumSize: const Size(0, 38),
       ),
     );
   }
