@@ -41,6 +41,23 @@ class SupabaseService {
     }
   }
 
+  Future<void> addressSave({
+    required String label,
+    required int userID,
+    required String address
+  }) async {
+    try {
+      await client.from('addressDB').insert({
+        'user_id': userID,
+        'label': label,
+        'address': address,
+        'created_at': DateTime.now().toIso8601String()
+      });
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   Future<String?> getCurrentUserId() async {
     try {
       return client.auth.currentUser?.id;
