@@ -59,7 +59,7 @@ class _SignupPageState extends State<SignupPage> {
     }
 
     // DEBUGGING 
-    // print('DEBUG - Pre-hashed password: $password');
+    print('DEBUG - Pre-hashed password: $password');
     // Hashing
     final hashedPassword = sha256.convert(utf8.encode(password)).toString();
     //print('DEBUG - Hashed password: $hashedPassword');

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'location_input_page.dart';
 
 import '../services/api_keys.dart';
 import '../services/google_places_directions_service.dart';
@@ -332,7 +333,17 @@ class _HomeMapPageState extends State<HomeMapPage> {
                     _TopChip(
                       label: 'Home',
                       icon: Icons.home_outlined,
-                      onPressed: () {},
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const LocationInputPage(
+                              title: 'Home',
+                              placeholder: 'Enter your home address',
+                            ),
+                          ),
+                        );
+                      },
                     ),
                     const SizedBox(width: 8),
                     _TopChip(
