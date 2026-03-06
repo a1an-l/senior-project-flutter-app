@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'location_input_page.dart';
+
+import '../services/api_keys.dart';
+import '../services/google_places_directions_service.dart';
 
 class HomeMapPage extends StatefulWidget {
   const HomeMapPage({super.key});
@@ -14,6 +18,20 @@ class _HomeMapPageState extends State<HomeMapPage> {
   int bottomIndex = 0;
   GoogleMapController? controller;
   bool myLocationEnabled = false;
+  Position? currentPosition;
+  StreamSubscription<Position>? positionSubscription;
+  bool followUser = true;
+  String? googleMapsWebApiKey;
+
+  final TextEditingController searchController = TextEditingController();
+  final FocusNode searchFocusNode = FocusNode();
+  List<PlaceSuggestion> suggestions = [];
+  bool searching = false;
+  PlaceDetails? selectedPlace;
+  String sessionToken = DateTime.now().millisecondsSinceEpoch.toString();
+
+  Set<Marker> markers = {};
+  Set<Polyline> polylines = {};
 
   static const CameraPosition initialCameraPosition = CameraPosition(
     target: LatLng(26.3017, -98.1633),
@@ -24,6 +42,32 @@ class _HomeMapPageState extends State<HomeMapPage> {
   void initState() {
     super.initState();
     _initLocation();
+    _loadWebKey();
+    searchController.addListener(_onSearchChanged);
+  }
+
+  Future<void> _loadWebKey() async {
+    final key = await ApiKeys.googleMapsWebApiKey();
+    if (!mounted) {
+      return;
+    }
+    setState(() => googleMapsWebApiKey = key);
+  }
+
+  @override
+  void dispose() {
+    positionSubscription?.cancel();
+    searchController.dispose();
+    searchFocusNode.dispose();
+    super.dispose();
+  }
+
+  GooglePlacesDirectionsService? get googleService {
+    final apiKey = googleMapsWebApiKey;
+    if (apiKey == null || apiKey.isEmpty) {
+      return null;
+    }
+    return GooglePlacesDirectionsService(apiKey: apiKey);
   }
 
   Future<void> _initLocation() async {
@@ -54,6 +98,26 @@ class _HomeMapPageState extends State<HomeMapPage> {
       ),
     );
 
+    currentPosition = position;
+
+    positionSubscription?.cancel();
+    positionSubscription = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 3,
+      ),
+    ).listen((p) async {
+      currentPosition = p;
+      if (!mounted) {
+        return;
+      }
+      if (followUser && controller != null) {
+        await controller!.animateCamera(
+          CameraUpdate.newLatLng(LatLng(p.latitude, p.longitude)),
+        );
+      }
+    });
+
     if (!mounted) {
       return;
     }
@@ -70,6 +134,132 @@ class _HomeMapPageState extends State<HomeMapPage> {
           zoom: 15,
         ),
       ),
+    );
+  }
+
+  Future<void> _onSearchChanged() async {
+    final text = searchController.text.trim();
+    if (!searchFocusNode.hasFocus) {
+      return;
+    }
+    if (text.isEmpty) {
+      if (mounted) {
+        setState(() => suggestions = []);
+      }
+      return;
+    }
+
+    final service = googleService;
+    if (service == null) {
+      return;
+    }
+
+    setState(() => searching = true);
+    final results = await service.autocomplete(input: text, sessionToken: sessionToken);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      suggestions = results;
+      searching = false;
+    });
+  }
+
+  Future<void> _selectSuggestion(PlaceSuggestion suggestion) async {
+    final service = googleService;
+    if (service == null) {
+      return;
+    }
+    final origin = currentPosition;
+    if (origin == null) {
+      return;
+    }
+
+    searchFocusNode.unfocus();
+    setState(() {
+      suggestions = [];
+      searching = true;
+      selectedPlace = null;
+      polylines = {};
+      markers = {};
+    });
+
+    final details = await service.placeDetails(
+      placeId: suggestion.placeId,
+      sessionToken: sessionToken,
+    );
+    if (!mounted || details == null) {
+      return;
+    }
+
+    final directions = await service.directions(
+      originLat: origin.latitude,
+      originLng: origin.longitude,
+      destLat: details.lat,
+      destLng: details.lng,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    final destLatLng = LatLng(details.lat, details.lng);
+    final newMarkers = <Marker>{
+      Marker(
+        markerId: const MarkerId('destination'),
+        position: destLatLng,
+        infoWindow: InfoWindow(title: details.name),
+      ),
+    };
+
+    final newPolylines = <Polyline>{};
+    if (directions != null) {
+      final points = directions.polylinePoints
+          .map((p) => LatLng(p[0], p[1]))
+          .toList(growable: false);
+      newPolylines.add(
+        Polyline(
+          polylineId: const PolylineId('route'),
+          points: points,
+          width: 5,
+          color: const Color(0xFF2F5CE5),
+        ),
+      );
+
+      final bounds = _boundsFor(points);
+      await controller?.animateCamera(
+        CameraUpdate.newLatLngBounds(bounds, 70),
+      );
+    } else {
+      await controller?.animateCamera(CameraUpdate.newLatLngZoom(destLatLng, 14));
+    }
+
+    setState(() {
+      selectedPlace = details;
+      markers = newMarkers;
+      polylines = newPolylines;
+      searching = false;
+      searchController.text = details.name.isEmpty ? suggestion.description : details.name;
+      sessionToken = DateTime.now().millisecondsSinceEpoch.toString();
+    });
+  }
+
+  LatLngBounds _boundsFor(List<LatLng> points) {
+    double? minLat;
+    double? maxLat;
+    double? minLng;
+    double? maxLng;
+
+    for (final p in points) {
+      minLat = minLat == null ? p.latitude : (p.latitude < minLat ? p.latitude : minLat);
+      maxLat = maxLat == null ? p.latitude : (p.latitude > maxLat ? p.latitude : maxLat);
+      minLng = minLng == null ? p.longitude : (p.longitude < minLng ? p.longitude : minLng);
+      maxLng = maxLng == null ? p.longitude : (p.longitude > maxLng ? p.longitude : maxLng);
+    }
+
+    return LatLngBounds(
+      southwest: LatLng(minLat ?? 0, minLng ?? 0),
+      northeast: LatLng(maxLat ?? 0, maxLng ?? 0),
     );
   }
 
@@ -118,8 +308,14 @@ class _HomeMapPageState extends State<HomeMapPage> {
             myLocationEnabled: myLocationEnabled,
             myLocationButtonEnabled: true,
             zoomControlsEnabled: false,
+            markers: markers,
+            polylines: polylines,
+            onCameraMoveStarted: () => followUser = false,
             onMapCreated: (value) {
               controller = value;
+              if (myLocationEnabled) {
+                _initLocation();
+              }
             },
           ),
           SafeArea(
@@ -158,6 +354,108 @@ class _HomeMapPageState extends State<HomeMapPage> {
                       icon: Icons.add,
                       onPressed: () {},
                     ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 62, 16, 0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFE5E5E5)),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x14000000),
+                            blurRadius: 10,
+                            offset: Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          const SizedBox(width: 10),
+                          const Icon(Icons.search, size: 18, color: Color(0xFF8A8A8A)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: searchController,
+                              focusNode: searchFocusNode,
+                              decoration: const InputDecoration(
+                                hintText: 'Search',
+                                border: InputBorder.none,
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                          if (searching)
+                            const SizedBox(
+                              width: 28,
+                              height: 28,
+                              child: Padding(
+                                padding: EdgeInsets.all(6),
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            )
+                          else if (searchController.text.isNotEmpty)
+                            IconButton(
+                              onPressed: () {
+                                setState(() {
+                                  searchController.clear();
+                                  suggestions = [];
+                                  selectedPlace = null;
+                                  polylines = {};
+                                  markers = {};
+                                });
+                              },
+                              icon: const Icon(Icons.close, size: 18),
+                            ),
+                        ],
+                      ),
+                    ),
+                    if (suggestions.isNotEmpty)
+                      Container(
+                        margin: const EdgeInsets.only(top: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFE5E5E5)),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x14000000),
+                              blurRadius: 10,
+                              offset: Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: suggestions.length > 6 ? 6 : suggestions.length,
+                          separatorBuilder: (context, index) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final s = suggestions[index];
+                            return ListTile(
+                              dense: true,
+                              title: Text(
+                                s.description,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                              onTap: () => _selectSuggestion(s),
+                            );
+                          },
+                        ),
+                      ),
                   ],
                 ),
               ),

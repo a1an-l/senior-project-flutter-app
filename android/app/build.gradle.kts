@@ -15,11 +15,16 @@ val localProperties = Properties().apply {
 }
 
 val mapsApiKey = localProperties.getProperty("MAPS_API_KEY") ?: ""
+val googleMapsWebApiKey = localProperties.getProperty("GOOGLE_MAPS_WEB_API_KEY") ?: ""
 
 android {
     namespace = "com.example.senior_project_flutter_app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
+
+    buildFeatures {
+        buildConfig = true
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -41,6 +46,12 @@ android {
         versionName = flutter.versionName
 
         manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
+
+        buildConfigField(
+            "String",
+            "GOOGLE_MAPS_WEB_API_KEY",
+            "\"$googleMapsWebApiKey\"",
+        )
     }
 
     buildTypes {
