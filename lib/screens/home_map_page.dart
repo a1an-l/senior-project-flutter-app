@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_drawer.dart';
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -442,13 +443,16 @@ class _HomeMapPageState extends State<HomeMapPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Scaffold( 
       appBar: AppBar(
         backgroundColor: const Color(0xFF2F5CE5),
         foregroundColor: Colors.white,
-        leading: IconButton(
+       leading: IconButton(
           icon: const Icon(Icons.menu),
-          onPressed: () {},
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AppDrawer()),
+          ),
         ),
         title: const Text(
           'HiWay',
@@ -457,7 +461,9 @@ class _HomeMapPageState extends State<HomeMapPage> {
         centerTitle: true,
         actions: [
           IconButton(
-            onPressed: () {},
+            onPressed: () {
+              //notification button 
+            },
             icon: const Stack(
               clipBehavior: Clip.none,
               children: [
