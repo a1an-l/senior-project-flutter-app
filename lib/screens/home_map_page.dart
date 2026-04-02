@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_keys.dart';
 import '../services/google_places_directions_service.dart';
 import '../services/saved_places.dart';
+import '../services/route_service.dart'; // NEW IMPORT
+import 'package:wakelock_plus/wakelock_plus.dart'; // NEW IMPORT
 
 import 'location_input_page.dart';
 
@@ -37,6 +39,11 @@ class _HomeMapPageState extends State<HomeMapPage> {
 
   Set<Marker> markers = {};
   Set<Polyline> polylines = {};
+
+  // --- Route Tracking Variables ---
+  bool isTracking = false;
+  List<LatLng> trackedRoutePoints = [];
+  final RouteService _routeService = RouteService();
 
   static const CameraPosition initialCameraPosition = CameraPosition(
     target: LatLng(26.3017, -98.1633),
@@ -77,6 +84,83 @@ class _HomeMapPageState extends State<HomeMapPage> {
     searchController.dispose();
     searchFocusNode.dispose();
     super.dispose();
+  }
+
+  // --- Play/Pause Tracking Logic ---
+  Future<void> _toggleTracking() async {
+    if (isTracking) {
+      // 1. STOP TRACKING
+      setState(() {
+        isTracking = false;
+      });
+
+      // --- ADDED THIS LINE: Let the screen go to sleep normally again ---
+      WakelockPlus.disable();
+
+      // 2. SAVE ROUTE
+      if (trackedRoutePoints.length >= 2) {
+        try {
+          // Get the real user ID from local storage
+          final prefs = await SharedPreferences.getInstance();
+          final int? actualUserId = prefs.getInt('user_id');
+
+          // Check if they are a guest (no ID saved)
+          if (actualUserId == null) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                    content: Text('You must be logged in to save routes!'),
+                    backgroundColor: Colors.orange
+                ),
+              );
+            }
+            return; // Stop the function, don't try to save
+          }
+
+          // Pass the REAL user ID to your Route Service
+          await _routeService.saveNewRoute(trackedRoutePoints, actualUserId);
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Route saved successfully!'),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed to save route: $e'), backgroundColor: Colors.red),
+            );
+          }
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Not enough points to save a route.')),
+          );
+        }
+      }
+    } else {
+      // 3. START TRACKING
+      setState(() {
+        isTracking = true;
+        trackedRoutePoints.clear();
+
+        // --- ADD THIS LINE: Keep the screen awake while tracking! ---
+        WakelockPlus.enable();
+
+        // Remove old tracked route if it exists on the map
+        polylines.removeWhere((p) => p.polylineId == const PolylineId('tracked_route'));
+
+        // Add starting point
+        if (currentPosition != null) {
+          trackedRoutePoints.add(LatLng(currentPosition!.latitude, currentPosition!.longitude));
+        }
+      });
+    }
   }
 
   Future<void> _loadRecentSearches() async {
@@ -154,6 +238,25 @@ class _HomeMapPageState extends State<HomeMapPage> {
       if (!mounted) {
         return;
       }
+
+      // --- Update the tracked route if tracking is active ---
+      if (isTracking) {
+        setState(() {
+          trackedRoutePoints.add(LatLng(p.latitude, p.longitude));
+
+          // Remove the old polyline and draw the new updated one
+          polylines.removeWhere((poly) => poly.polylineId == const PolylineId('tracked_route'));
+          polylines.add(
+            Polyline(
+              polylineId: const PolylineId('tracked_route'),
+              points: List.from(trackedRoutePoints),
+              width: 6,
+              color: Colors.redAccent,
+            ),
+          );
+        });
+      }
+
       if (followUser && controller != null) {
         await controller!.animateCamera(
           CameraUpdate.newLatLng(LatLng(p.latitude, p.longitude)),
@@ -225,7 +328,8 @@ class _HomeMapPageState extends State<HomeMapPage> {
       searching = true;
       selectedPlace = null;
       selectedDirections = null;
-      polylines = {};
+      // We keep the tracked route polyline if it exists, clear the rest
+      polylines.removeWhere((p) => p.polylineId != const PolylineId('tracked_route'));
       markers = {};
     });
 
@@ -257,14 +361,14 @@ class _HomeMapPageState extends State<HomeMapPage> {
       ),
     };
 
-    final newPolylines = <Polyline>{};
+    final newPolylines = Set<Polyline>.from(polylines);
     if (directions != null) {
       final points = directions.polylinePoints
           .map((p) => LatLng(p[0], p[1]))
           .toList(growable: false);
       newPolylines.add(
         Polyline(
-          polylineId: const PolylineId('route'),
+          polylineId: const PolylineId('route'), // Blue navigation route
           points: points,
           width: 5,
           color: const Color(0xFF2F5CE5),
@@ -337,7 +441,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
         lng: place.lng,
       );
       selectedDirections = null;
-      polylines = {};
+      polylines.removeWhere((p) => p.polylineId != const PolylineId('tracked_route'));
       markers = {};
     });
 
@@ -361,7 +465,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
       ),
     };
 
-    final newPolylines = <Polyline>{};
+    final newPolylines = Set<Polyline>.from(polylines);
     if (directions != null) {
       final points = directions.polylinePoints
           .map((p) => LatLng(p[0], p[1]))
@@ -621,7 +725,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
                                 suggestions = [];
                                 selectedPlace = null;
                                 selectedDirections = null;
-                                polylines = {};
+                                polylines.removeWhere((p) => p.polylineId != const PolylineId('tracked_route'));
                                 markers = {};
                               });
                             },
@@ -758,7 +862,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
                               suggestions = [];
                               selectedPlace = null;
                               selectedDirections = null;
-                              polylines = {};
+                              polylines.removeWhere((p) => p.polylineId != const PolylineId('tracked_route'));
                               markers = {};
                             });
                           },
@@ -784,24 +888,30 @@ class _HomeMapPageState extends State<HomeMapPage> {
               onPressed: () => setState(() => bottomIndex = 0),
             ),
             const Spacer(),
+
+            // --- The Dynamic Play/Pause Button ---
             Container(
               width: 46,
               height: 46,
-              decoration: const BoxDecoration(
-                color: Color(0xFF2F5CE5),
+              decoration: BoxDecoration(
+                color: isTracking ? Colors.red : const Color(0xFF2F5CE5), // Red when tracking
                 shape: BoxShape.circle,
               ),
               child: IconButton(
-                onPressed: () {},
-                icon: const Icon(Icons.play_arrow_rounded, color: Colors.white),
+                onPressed: _toggleTracking,
+                icon: Icon(
+                    isTracking ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                    color: Colors.white
+                ),
               ),
             ),
+
             const Spacer(),
             _BottomItem(
               icon: Icons.history,
               label: 'History',
               selected: bottomIndex == 1,
-              onPressed: () => setState(() => bottomIndex = 1),
+              onPressed: () => setState(() => bottomIndex = 1), // This will later navigate to your History Screen
             ),
           ],
         ),
@@ -912,11 +1022,11 @@ class _RouteInfoRow extends StatelessWidget {
       runSpacing: 8,
       children: parts.isEmpty
           ? [
-              const Text(
-                'Directions unavailable',
-                style: TextStyle(fontSize: 12, color: Color(0xFF8A8A8A)),
-              ),
-            ]
+        const Text(
+          'Directions unavailable',
+          style: TextStyle(fontSize: 12, color: Color(0xFF8A8A8A)),
+        ),
+      ]
           : parts,
     );
   }
