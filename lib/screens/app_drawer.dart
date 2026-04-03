@@ -1,8 +1,65 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-class AppDrawer extends StatelessWidget {
+import 'edit_profile_page.dart'; 
+
+class AppDrawer extends StatefulWidget {
   const AppDrawer({super.key});
 
+  @override
+  State<AppDrawer> createState() => _AppDrawerState();
+}
+
+class _AppDrawerState extends State<AppDrawer> {
+  String username = '';
+
+  @override
+  void initState() {
+    super.initState();
+    loadUsername();
+  }
+
+  Future<void> loadUsername() async {
+    //debugPrint('here');
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final int? userId = prefs.getInt('user_id');
+
+      debugPrint('user id: $userId');
+      //if user is signed out dipslay guest
+      if (userId == null) {
+        setState(() {
+          username = 'Guest!';
+        });
+        return;
+      }
+
+      final supabase = Supabase.instance.client;
+
+      final data = await supabase
+          .from('users')
+          .select('username')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+      if (data != null) {
+        setState(() {
+          username = data['username'] ?? '';
+        });
+      } else {
+        setState(() {
+          username = '';
+        });
+      }
+    } catch (e) {
+      debugPrint('LOADUSERNAME ERROR: $e');
+      setState(() {
+        username = '';
+      });
+    }
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -45,8 +102,8 @@ class AppDrawer extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 14),
-                const Text(
-                  'Hi Bob!',
+                Text(
+                  username.isEmpty ? 'Hi!' : 'Hi $username!', //defualt to Hi if not signed in
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 28,
@@ -64,11 +121,22 @@ class AppDrawer extends StatelessWidget {
               child: Column(
                 children: [
                   const SizedBox(height: 8),
-                  _DrawerItem(
+                 _DrawerItem(
                     icon: Icons.person_outline,
                     label: 'Profile',
                     subtitle: 'View and Edit your profile',
-                    onTap: () {},
+                    onTap: () async {
+                      final updated = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const EditProfilePage(),
+                        ),
+                      );
+
+                      if (updated == true && mounted) {
+                        await loadUsername();
+                      }
+                    },
                   ),
                   _DrawerItem(
                     icon: Icons.route_outlined,
