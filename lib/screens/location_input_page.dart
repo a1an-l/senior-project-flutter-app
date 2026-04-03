@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../services/api_keys.dart';
 import '../services/google_places_directions_service.dart';
 import '../services/saved_places.dart';
+import '../services/notification_service.dart';
+import '../services/notifications_store.dart';
 
 class LocationInputPage extends StatefulWidget {
   final String title;
@@ -116,9 +118,30 @@ class _LocationInputPageState extends State<LocationInputPage> {
       lat: details.lat,
       lng: details.lng,
       placeId: details.placeId,
+      avgSeconds: null,
+      samples: null,
     );
 
     await SavedPlacesStore.set(saved);
+
+    Future.delayed(const Duration(seconds: 10), () async {
+      await NotificationsStore.add(
+        HiWayNotification(
+          id: DateTime.now().microsecondsSinceEpoch.toString(),
+          title: 'Test Notification',
+          subtitle: 'Saved ${widget.title}',
+          detail: 'This is a test alert after saving.',
+          createdAtMs: DateTime.now().millisecondsSinceEpoch,
+          read: false,
+          urgent: true,
+        ),
+      );
+      await NotificationService.instance.showTrafficAlert(
+        title: 'Test Notification',
+        body: 'Saved ${widget.title}. This is a test alert.',
+        payload: 'test',
+      );
+    });
 
     if (!mounted) {
       return;
