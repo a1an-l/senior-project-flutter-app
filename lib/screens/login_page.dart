@@ -267,7 +267,7 @@ class _LoginPageState extends State<LoginPage> {
                         onPressed: () {
                           Navigator.pushReplacement(
                             context,
-                            MaterialPageRoute(builder: (_) => const LocationSetupScreen()),
+                            MaterialPageRoute(builder: (_) => const HomeMapPage()),
                           );
                         },
                         child: const Text(
