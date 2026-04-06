@@ -1,9 +1,18 @@
 import 'package:flutter/material.dart';
 import 'screens/landing_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:workmanager/workmanager.dart';
+
+import 'services/background_tasks.dart';
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
+
+  await NotificationService.instance.init(onTap: (_) {});
+  await NotificationService.instance.requestAndroidPermissionIfNeeded();
 
   try {
     await Supabase.initialize(

@@ -80,6 +80,7 @@ class GooglePlacesDirectionsService {
     required double originLng,
     required double destLat,
     required double destLng,
+    bool alternatives = false,
   }) async {
     final departureTime = (DateTime.now().millisecondsSinceEpoch / 1000).round();
     final uri = Uri.https('maps.googleapis.com', '/maps/api/directions/json', {
@@ -88,6 +89,7 @@ class GooglePlacesDirectionsService {
       'mode': 'driving',
       'departure_time': departureTime.toString(),
       'traffic_model': 'best_guess',
+      if (alternatives) 'alternatives': 'true',
       'key': apiKey,
     });
 
@@ -107,9 +109,29 @@ class GooglePlacesDirectionsService {
       return null;
     }
 
-    final overviewPolyline = routes.first['overview_polyline'] as Map<String, dynamic>;
+    Map<String, dynamic> bestRoute = routes.first;
+    int? bestTrafficSeconds;
+    for (final r in routes) {
+      final legs = (r['legs'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
+      if (legs.isEmpty) {
+        continue;
+      }
+      final durationInTraffic = legs.first['duration_in_traffic'] as Map<String, dynamic>?;
+      final duration = legs.first['duration'] as Map<String, dynamic>?;
+      final trafficSeconds = (durationInTraffic?['value'] as num?)?.toInt() ??
+          (duration?['value'] as num?)?.toInt();
+      if (trafficSeconds == null) {
+        continue;
+      }
+      if (bestTrafficSeconds == null || trafficSeconds < bestTrafficSeconds) {
+        bestTrafficSeconds = trafficSeconds;
+        bestRoute = r;
+      }
+    }
+
+    final overviewPolyline = bestRoute['overview_polyline'] as Map<String, dynamic>;
     final points = overviewPolyline['points'] as String;
-    final legs = (routes.first['legs'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
+    final legs = (bestRoute['legs'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
     final firstLeg = legs.isNotEmpty ? legs.first : null;
 
     String? distanceText;
@@ -130,6 +152,33 @@ class GooglePlacesDirectionsService {
       durationInTrafficSeconds = (durationInTraffic?['value'] as num?)?.toInt();
     }
 
+    final steps = <DirectionsStep>[];
+    if (firstLeg != null) {
+      final rawSteps = (firstLeg['steps'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
+      for (final s in rawSteps) {
+        final instructionRaw = (s['html_instructions'] as String?) ?? '';
+        final distance = s['distance'] as Map<String, dynamic>?;
+        final duration = s['duration'] as Map<String, dynamic>?;
+        final endLocation = s['end_location'] as Map<String, dynamic>?;
+
+        final endLat = (endLocation?['lat'] as num?)?.toDouble();
+        final endLng = (endLocation?['lng'] as num?)?.toDouble();
+        if (endLat == null || endLng == null) {
+          continue;
+        }
+
+        steps.add(
+          DirectionsStep(
+            instruction: _stripHtml(instructionRaw),
+            distanceText: (distance?['text'] as String?) ?? '',
+            durationText: (duration?['text'] as String?) ?? '',
+            endLat: endLat,
+            endLng: endLng,
+          ),
+        );
+      }
+    }
+
     return DirectionsResult(
       polylinePoints: decodePolyline(points),
       distanceText: distanceText,
@@ -137,6 +186,7 @@ class GooglePlacesDirectionsService {
       durationInTrafficText: durationInTrafficText,
       durationSeconds: durationSeconds,
       durationInTrafficSeconds: durationInTrafficSeconds,
+      steps: steps,
     );
   }
 }
@@ -172,6 +222,7 @@ class DirectionsResult {
     required this.durationInTrafficText,
     required this.durationSeconds,
     required this.durationInTrafficSeconds,
+    required this.steps,
   });
 
   final List<List<double>> polylinePoints;
@@ -180,6 +231,27 @@ class DirectionsResult {
   final String? durationInTrafficText;
   final int? durationSeconds;
   final int? durationInTrafficSeconds;
+  final List<DirectionsStep> steps;
+}
+
+class DirectionsStep {
+  DirectionsStep({
+    required this.instruction,
+    required this.distanceText,
+    required this.durationText,
+    required this.endLat,
+    required this.endLng,
+  });
+
+  final String instruction;
+  final String distanceText;
+  final String durationText;
+  final double endLat;
+  final double endLng;
+}
+
+String _stripHtml(String input) {
+  return input.replaceAll(RegExp('<[^>]*>'), '').trim();
 }
 
 List<List<double>> decodePolyline(String encoded) {
