@@ -1,14 +1,22 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class NotificationService {
-  static final FlutterLocalNotificationsPlugin _notificationsPlugin =
+  // Singleton (from main)
+  static final NotificationService instance = NotificationService._();
+  NotificationService._();
+
+  final FlutterLocalNotificationsPlugin plugin =
       FlutterLocalNotificationsPlugin();
 
-  static Future<void> initialize() async {
+  // Initialization (merged)
+  Future<void> init({
+    required void Function(String? payload) onTap,
+  }) async {
     const AndroidInitializationSettings androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    const DarwinInitializationSettings iosSettings = DarwinInitializationSettings(
+    const DarwinInitializationSettings iosSettings =
+        DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: true,
@@ -19,24 +27,39 @@ class NotificationService {
       iOS: iosSettings,
     );
 
-    await _notificationsPlugin.initialize(settings);
+    await plugin.initialize(
+      settings,
+      onDidReceiveNotificationResponse: (response) =>
+          onTap(response.payload),
+    );
   }
 
-  static Future<void> showTrafficAlert({
+  // Android permission (from main)
+  Future<void> requestAndroidPermissionIfNeeded() async {
+    final android = plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    await android?.requestNotificationsPermission();
+  }
+
+  // Base notification (merged: payload + iOS + better config)
+  Future<void> showTrafficAlert({
     required String title,
     required String body,
+    String? payload,
     int id = 0,
   }) async {
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'traffic_channel',
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+      'traffic_alerts',
       'Traffic Alerts',
-      channelDescription: 'Notifications for traffic conditions',
-      importance: Importance.high,
+      channelDescription: 'Traffic delay alerts and reroutes',
+      importance: Importance.max,
       priority: Priority.high,
       showWhen: true,
     );
 
-    const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
+    const DarwinNotificationDetails iosDetails =
+        DarwinNotificationDetails(
       presentAlert: true,
       presentBadge: true,
       presentSound: true,
@@ -47,28 +70,42 @@ class NotificationService {
       iOS: iosDetails,
     );
 
-    await _notificationsPlugin.show(id, title, body, details);
+    await plugin.show(
+      id,
+      title,
+      body,
+      details,
+      payload: payload,
+    );
   }
 
-  static Future<void> showSeriousTrafficAlert(double radiusMiles) async {
+  // Prebuilt alerts (from Traffic-Radius)
+  Future<void> showSeriousTrafficAlert(double radiusMiles) async {
     await showTrafficAlert(
+      id: 1001,
       title: 'Heavy Traffic Detected',
-      body: 'Serious traffic congestion detected within ${radiusMiles.round()} miles. Consider alternative routes.',
+      body:
+          'Serious traffic congestion detected within ${radiusMiles.round()} miles. Consider alternative routes.',
+      payload: 'serious_traffic',
     );
   }
 
-  static Future<void> showCongestedTrafficAlert(double radiusMiles) async {
+  Future<void> showCongestedTrafficAlert(double radiusMiles) async {
     await showTrafficAlert(
+      id: 1002,
       title: 'Traffic Congestion',
-      body: 'Moderate traffic congestion detected within ${radiusMiles.round()} miles.',
+      body:
+          'Moderate traffic congestion detected within ${radiusMiles.round()} miles.',
+      payload: 'moderate_traffic',
     );
   }
 
-  static Future<void> cancelAllNotifications() async {
-    await _notificationsPlugin.cancelAll();
+  // Cancel methods (from Traffic-Radius)
+  Future<void> cancelAllNotifications() async {
+    await plugin.cancelAll();
   }
 
-  static Future<void> cancelNotification(int id) async {
-    await _notificationsPlugin.cancel(id);
+  Future<void> cancelNotification(int id) async {
+    await plugin.cancel(id);
   }
 }
