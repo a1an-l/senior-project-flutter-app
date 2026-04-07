@@ -15,7 +15,11 @@ class BackgroundTrafficService {
   static Future<void> initialize() async {
     try {
       print('[TrafficDetection] Initializing notification service...');
-      await NotificationService.initialize();
+      await NotificationService.instance.init(
+        onTap: (payload) {
+          print('[TrafficDetection] Notification tapped with payload: $payload');
+        },
+      );
       print('[TrafficDetection] Notification service initialized successfully');
 
       // Check if monitoring was previously enabled and restart it
@@ -68,14 +72,14 @@ class BackgroundTrafficService {
 
       if (hasSerious) {
         print('[TrafficDetection] Sending serious traffic notification');
-        await NotificationService.showSeriousTrafficAlert(radius);
+        await NotificationService.instance.showSeriousTrafficAlert(radius);
       } else if (!notifyOnlySerious) {
         // Check for any congestion
         final worstCondition = await TrafficDetectionService.getWorstTrafficCondition(position, radius);
         print('[TrafficDetection] Worst traffic condition: ${worstCondition.toString()}');
         if (worstCondition == TrafficCondition.congested) {
           print('[TrafficDetection] Sending congested traffic notification');
-          await NotificationService.showCongestedTrafficAlert(radius);
+          await NotificationService.instance.showCongestedTrafficAlert(radius);
         }
       }
 
