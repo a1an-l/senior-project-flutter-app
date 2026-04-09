@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // <-- Added this import
 import 'signup_page.dart';
 import 'home_map_page.dart';
 import 'location_setup_screen.dart';
-import 'package:crypto/crypto.dart';
-import 'dart:convert';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -18,11 +15,11 @@ class _LoginPageState extends State<LoginPage> {
   // 1. Controllers to capture user input
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-
+  
   // 2. State variables for loading and errors
   bool _isLoading = false;
-  String? _errorMessage;
-
+  String? _errorMessage; 
+  
   bool rememberMe = false;
   bool hidePassword = true;
 
@@ -34,25 +31,15 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
-      // 1. Get the typed password and hash it
-      final rawPassword = _passwordController.text.trim();
-      final hashedInputPassword = sha256.convert(utf8.encode(rawPassword)).toString();
-
-      // 2. Query the 'users' table for a matching email and the HASHED password
+      // Query the 'users' table for a matching email and password
       final data = await Supabase.instance.client
           .from('users')
           .select()
           .eq('email', _emailController.text.trim())
-          .eq('password', hashedInputPassword) // Compare with the hash, not the raw text
+          .eq('password', _passwordController.text.trim())
           .maybeSingle(); // maybeSingle returns null if no match is found
 
       if (data != null) {
-        // --- ADDED: Save the User ID to the phone's memory ---
-        final prefs = await SharedPreferences.getInstance();
-        // We grab the 'user_id' from the Supabase row and save it locally
-        await prefs.setInt('user_id', data['user_id'] as int);
-        // -----------------------------------------------------
-
         // Success: Transition to home page
         if (mounted) {
           Navigator.pushReplacement(
@@ -211,7 +198,7 @@ class _LoginPageState extends State<LoginPage> {
                       ],
                     ),
                     const SizedBox(height: 14),
-
+                    
                     // 5. Updated Log in Button with Loading Spinner
                     SizedBox(
                       width: double.infinity,
@@ -225,16 +212,16 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         ),
                         onPressed: _isLoading ? null : _handleLogin,
-                        child: _isLoading
-                            ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
-                        )
-                            : const Text(
-                          'Log in',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                        ),
+                        child: _isLoading 
+                          ? const SizedBox(
+                              width: 20, 
+                              height: 20, 
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                            )
+                          : const Text(
+                              'Log in',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                            ),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -277,19 +264,12 @@ class _LoginPageState extends State<LoginPage> {
                             borderRadius: BorderRadius.circular(10),
                           ),
                         ),
-                        // --- ADDED: Async and Clear User Data ---
-                        onPressed: () async {
-                          final prefs = await SharedPreferences.getInstance();
-                          await prefs.remove('user_id'); // Clear any old saved user data
-
-                          if (context.mounted) {
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(builder: (_) => const LocationSetupScreen()),
-                            );
-                          }
+                        onPressed: () {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(builder: (_) => const LocationSetupScreen()),
+                          );
                         },
-                        // ----------------------------------------
                         child: const Text(
                           'Continue as a Guest',
                           style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
