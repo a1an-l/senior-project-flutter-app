@@ -285,7 +285,7 @@ class _LoginPageState extends State<LoginPage> {
                           if (context.mounted) {
                             Navigator.pushReplacement(
                               context,
-                              MaterialPageRoute(builder: (_) => const LocationSetupScreen()),
+                              MaterialPageRoute(builder: (_) => const HomeMapPage()),
                             );
                           }
                         },

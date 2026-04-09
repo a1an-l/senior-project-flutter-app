@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'traffic_settings_page.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
@@ -81,6 +82,20 @@ class AppDrawer extends StatelessWidget {
                     label: 'Settings',
                     subtitle: 'View settings',
                     onTap: () {},
+                  ),
+                  _DrawerItem(
+                    icon: Icons.traffic_outlined,
+                    label: 'Traffic Detection',
+                    subtitle: 'Monitor traffic around you',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const TrafficSettingsPage(),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
