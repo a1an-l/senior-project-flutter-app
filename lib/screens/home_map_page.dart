@@ -755,12 +755,14 @@ class _HomeMapPageState extends State<HomeMapPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: scaffoldKey,
+      drawer: const AppDrawer(),
       appBar: AppBar(
         backgroundColor: const Color(0xFF2F5CE5),
         foregroundColor: Colors.white,
        leading: IconButton(
           icon: const Icon(Icons.menu),
-          onPressed: () {},
+          onPressed: () => scaffoldKey.currentState?.openDrawer(),
         ),
         title: const Text(
           'HiWay',
@@ -769,7 +771,13 @@ class _HomeMapPageState extends State<HomeMapPage> {
         centerTitle: true,
         actions: [
           IconButton(
-            onPressed: () {},
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const NotificationsPage()),
+              );
+              await _refreshUnread();
+            },
             icon: Stack(
               clipBehavior: Clip.none,
               children: [
