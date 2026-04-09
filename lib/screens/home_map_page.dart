@@ -9,11 +9,8 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/api_keys.dart';
 import '../services/google_places_directions_service.dart';
 import '../services/saved_places.dart';
-<<<<<<< History
 import '../services/route_service.dart';
 import '../services/history_service.dart';
-=======
->>>>>>> main
 
 // --- Manual Track Imports ---
 import '../services/route_service.dart'; 
@@ -65,7 +62,6 @@ class _HomeMapPageState extends State<HomeMapPage> {
   List<LatLng> trackedRoutePoints = [];
   final RouteService _routeService = RouteService();
   final HistoryService _historyService = HistoryService();
-  bool navigationActive = false;
 
   // --- Main Branch Variables ---
   Timer? inAppTrafficTimer;
@@ -128,16 +124,12 @@ class _HomeMapPageState extends State<HomeMapPage> {
   // --- Play/Pause Tracking Logic ---
   Future<void> _toggleTracking() async {
     if (isTracking) {
-<<<<<<< History
-      setState(() => isTracking = false);
-=======
       // 1. STOP TRACKING
       setState(() {
         isTracking = false;
       });
 
       // Let the screen go to sleep normally again
->>>>>>> main
       WakelockPlus.disable();
 
       if (trackedRoutePoints.length >= 2) {
@@ -159,11 +151,8 @@ class _HomeMapPageState extends State<HomeMapPage> {
       setState(() {
         isTracking = true;
         trackedRoutePoints.clear();
-<<<<<<< History
-=======
 
         // Keep the screen awake while tracking
->>>>>>> main
         WakelockPlus.enable();
         polylines.removeWhere((p) => p.polylineId == const PolylineId('tracked_route'));
         if (currentPosition != null) {
@@ -214,14 +203,10 @@ class _HomeMapPageState extends State<HomeMapPage> {
       locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 3),
     ).listen((p) async {
       currentPosition = p;
-<<<<<<< History
-      if (!mounted) return;
-=======
       await LastKnownLocationStore.save(lat: p.latitude, lng: p.longitude);
       if (!mounted) {
         return;
       }
->>>>>>> main
 
       if (isTracking) {
         setState(() {
@@ -392,9 +377,6 @@ class _HomeMapPageState extends State<HomeMapPage> {
       markers = {};
     });
 
-<<<<<<< History
-    final directions = await service.directions(originLat: origin.latitude, originLng: origin.longitude, destLat: place.lat, destLng: place.lng);
-=======
     final directions = await service.directions(
       originLat: origin.latitude,
       originLng: origin.longitude,
@@ -428,7 +410,6 @@ class _HomeMapPageState extends State<HomeMapPage> {
     if (!mounted) {
       return;
     }
->>>>>>> main
 
     if (!mounted) return;
     final destLatLng = LatLng(place.lat, place.lng);
@@ -556,17 +537,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
     }
   }
 
-  void _startInAppNavigation() {
-    final directions = selectedDirections;
-    if (directions == null || directions.steps.isEmpty) {
-      return;
-    }
-    setState(() {
-      navigationActive = true;
-      navigationStepIndex = 0;
-      followUser = true;
-    });
-  }
+ 
 
   void _stopInAppNavigation() {
     setState(() {
@@ -627,10 +598,6 @@ class _HomeMapPageState extends State<HomeMapPage> {
     }
   }
 
-  void _stopInAppNavigation() {
-    setState(() => navigationActive = false);
-  }
-
   LatLngBounds _boundsFor(List<LatLng> points) {
     double? minLat, maxLat, minLng, maxLng;
     for (final p in points) {
@@ -646,10 +613,8 @@ class _HomeMapPageState extends State<HomeMapPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       key: scaffoldKey,
-<<<<<<< History
-=======
       drawer: const AppDrawer(),
->>>>>>> main
+
       appBar: AppBar(
         backgroundColor: const Color(0xFF2F5CE5),
         foregroundColor: Colors.white,
@@ -671,9 +636,8 @@ class _HomeMapPageState extends State<HomeMapPage> {
             icon: Stack(
               clipBehavior: Clip.none,
               children: [
-<<<<<<< History
                 Icon(Icons.notifications_none),
-=======
+
                 const Icon(Icons.notifications_none),
                 if (hasUnreadNotifications)
                   const Positioned(
@@ -687,7 +651,6 @@ class _HomeMapPageState extends State<HomeMapPage> {
                       child: SizedBox(width: 8, height: 8),
                     ),
                   ),
->>>>>>> main
               ],
             ),
           ),
@@ -826,9 +789,6 @@ class _HomeMapPageState extends State<HomeMapPage> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           if (searchController.text.isEmpty && recentSearches.isNotEmpty)
-<<<<<<< History
-                            const Padding(padding: EdgeInsets.fromLTRB(12, 10, 12, 6), child: Row(children: [Text('Recent', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))])),
-=======
                             const Padding(
                               padding: EdgeInsets.fromLTRB(12, 10, 12, 6),
                               child: Row(
@@ -840,7 +800,6 @@ class _HomeMapPageState extends State<HomeMapPage> {
                                 ],
                               ),
                             ),
->>>>>>> main
                           if (searchController.text.isEmpty && recentSearches.isNotEmpty)
                             ListView.separated(
                               shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), itemCount: recentSearches.length, separatorBuilder: (context, index) => const Divider(height: 1),
@@ -891,11 +850,6 @@ class _HomeMapPageState extends State<HomeMapPage> {
                         const SizedBox(width: 10),
                         if (selectedDirections != null)
                           ElevatedButton(
-<<<<<<< History
-                            style: ElevatedButton.styleFrom(backgroundColor: navigationActive ? Colors.red : const Color(0xFF2F5CE5), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), minimumSize: const Size(0, 0)),
-                            onPressed: navigationActive ? _stopInAppNavigation : _startInAppNavigation,
-                            child: Text(navigationActive ? 'Stop' : 'Start Navigation', style: const TextStyle(fontWeight: FontWeight.w700)),
-=======
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF2F5CE5),
                               foregroundColor: Colors.white,
@@ -910,7 +864,6 @@ class _HomeMapPageState extends State<HomeMapPage> {
                               navigationActive ? 'Stop' : 'Start',
                               style: const TextStyle(fontWeight: FontWeight.w700),
                             ),
->>>>>>> main
                           )
                         else
                           const SizedBox.shrink(),
@@ -927,11 +880,8 @@ class _HomeMapPageState extends State<HomeMapPage> {
                               markers = {};
                             });
                             _stopInAppNavigation();
-<<<<<<< History
-=======
                             Workmanager().cancelByUniqueName('traffic_check');
                             inAppTrafficTimer?.cancel();
->>>>>>> main
                           },
                           icon: const Icon(Icons.close),
                         ),
@@ -943,9 +893,6 @@ class _HomeMapPageState extends State<HomeMapPage> {
             ),
         ],
       ),
-<<<<<<< History
-      floatingActionButton: navigationActive ? _NavigationBanner(directions: selectedDirections, onTap: _stopInAppNavigation) : null,
-=======
       floatingActionButton: navigationActive
           ? _NavigationBanner(
               directions: selectedDirections,
@@ -953,7 +900,6 @@ class _HomeMapPageState extends State<HomeMapPage> {
               onTap: _stopInAppNavigation,
             )
           : null,
->>>>>>> main
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       bottomNavigationBar: BottomAppBar(
         height: 70, padding: const EdgeInsets.symmetric(horizontal: 18),
@@ -961,11 +907,6 @@ class _HomeMapPageState extends State<HomeMapPage> {
           children: [
             _BottomItem(icon: Icons.map_outlined, label: 'Map', selected: bottomIndex == 0, onPressed: () => setState(() => bottomIndex = 0)),
             const Spacer(),
-<<<<<<< History
-            Container(width: 46, height: 46, decoration: BoxDecoration(color: isTracking ? Colors.red : const Color(0xFF2F5CE5), shape: BoxShape.circle), child: IconButton(onPressed: _toggleTracking, icon: Icon(isTracking ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white))),
-            const Spacer(),
-            _BottomItem(icon: Icons.history, label: 'History', selected: bottomIndex == 1, onPressed: () { Navigator.push(context, MaterialPageRoute(builder: (_) => const HistoryPage())).then((_) { setState(() => bottomIndex = 0); });}),
-=======
             Container(
               width: 46,
               height: 46,
@@ -986,9 +927,12 @@ class _HomeMapPageState extends State<HomeMapPage> {
               icon: Icons.history,
               label: 'History',
               selected: bottomIndex == 1,
-              onPressed: () => setState(() => bottomIndex = 1),
+              onPressed: () {Navigator.push(context,
+               MaterialPageRoute(builder: (_) => const HistoryPage())).then((_) {
+                 setState(() => bottomIndex = 0);
+                  });
+                  },
             ),
->>>>>>> main
           ],
         ),
       ),
@@ -1054,37 +998,6 @@ class _RouteInfoRow extends StatelessWidget {
   }
 }
 
-class _NavigationBanner extends StatelessWidget {
-  const _NavigationBanner({required this.directions, required this.onTap});
-  final DirectionsResult? directions;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final distance = directions?.distanceText ?? '';
-    final duration = directions?.durationText ?? '';
-    final metaParts = <String>[];
-    if (distance.isNotEmpty) metaParts.add(distance);
-    if (duration.isNotEmpty) metaParts.add(duration);
-
-    return Material(
-      elevation: 10, borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap, borderRadius: BorderRadius.circular(14),
-        child: Container(
-          width: double.infinity, margin: const EdgeInsets.symmetric(horizontal: 16), padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFE5E5E5))),
-          child: Row(
-            children: [
-              const Icon(Icons.navigation, color: Color(0xFF2F5CE5)), const SizedBox(width: 10),
-              Expanded(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [const Text("Navigating...", maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)), if (metaParts.isNotEmpty) ...[const SizedBox(height: 4), Text(metaParts.join(' • '), style: const TextStyle(fontSize: 12, color: Color(0xFF6F6F6F)))]])),
-              const SizedBox(width: 10), const Text('Tap to stop', style: TextStyle(fontSize: 12, color: Color(0xFF8A8A8A))),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _NavigationBanner extends StatelessWidget {
   const _NavigationBanner({required this.directions, required this.stepIndex, required this.onTap});
