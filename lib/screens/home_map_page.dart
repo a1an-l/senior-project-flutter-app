@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_drawer.dart';
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -8,11 +9,26 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/api_keys.dart';
 import '../services/google_places_directions_service.dart';
 import '../services/saved_places.dart';
+<<<<<<< History
 import '../services/route_service.dart';
 import '../services/history_service.dart';
+=======
+>>>>>>> main
 
+// --- Manual Track Imports ---
+import '../services/route_service.dart'; 
+import 'package:wakelock_plus/wakelock_plus.dart'; 
+
+// --- Main Branch Imports ---
+import '../services/last_known_location_store.dart';
+import '../services/notification_service.dart';
+import '../services/background_tasks.dart';
+import 'package:workmanager/workmanager.dart';
+import '../services/notifications_store.dart';
+import 'notifications_page.dart';
 import 'location_input_page.dart';
 import 'history_page.dart';
+
 
 class HomeMapPage extends StatefulWidget {
   const HomeMapPage({super.key});
@@ -51,6 +67,12 @@ class _HomeMapPageState extends State<HomeMapPage> {
   final HistoryService _historyService = HistoryService();
   bool navigationActive = false;
 
+  // --- Main Branch Variables ---
+  Timer? inAppTrafficTimer;
+  bool navigationActive = false;
+  int navigationStepIndex = 0;
+  bool hasUnreadNotifications = false;
+
   static const CameraPosition initialCameraPosition = CameraPosition(
     target: LatLng(26.3017, -98.1633),
     zoom: 12,
@@ -63,6 +85,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
     _initLocation();
     _loadApiKey();
     _loadRecentSearches();
+    _refreshUnread();
     searchController.addListener(_onSearchChanged);
     searchFocusNode.addListener(() {
       if (mounted) {
@@ -71,6 +94,14 @@ class _HomeMapPageState extends State<HomeMapPage> {
         });
       }
     });
+  }
+
+  Future<void> _refreshUnread() async {
+    final hasUnread = await NotificationsStore.hasUnread();
+    if (!mounted) {
+      return;
+    }
+    setState(() => hasUnreadNotifications = hasUnread);
   }
 
   Future<void> _loadApiKey() async {
@@ -88,6 +119,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
   @override
   void dispose() {
     positionSubscription?.cancel();
+    inAppTrafficTimer?.cancel();
     searchController.dispose();
     searchFocusNode.dispose();
     super.dispose();
@@ -96,7 +128,16 @@ class _HomeMapPageState extends State<HomeMapPage> {
   // --- Play/Pause Tracking Logic ---
   Future<void> _toggleTracking() async {
     if (isTracking) {
+<<<<<<< History
       setState(() => isTracking = false);
+=======
+      // 1. STOP TRACKING
+      setState(() {
+        isTracking = false;
+      });
+
+      // Let the screen go to sleep normally again
+>>>>>>> main
       WakelockPlus.disable();
 
       if (trackedRoutePoints.length >= 2) {
@@ -118,6 +159,11 @@ class _HomeMapPageState extends State<HomeMapPage> {
       setState(() {
         isTracking = true;
         trackedRoutePoints.clear();
+<<<<<<< History
+=======
+
+        // Keep the screen awake while tracking
+>>>>>>> main
         WakelockPlus.enable();
         polylines.removeWhere((p) => p.polylineId == const PolylineId('tracked_route'));
         if (currentPosition != null) {
@@ -168,7 +214,14 @@ class _HomeMapPageState extends State<HomeMapPage> {
       locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 3),
     ).listen((p) async {
       currentPosition = p;
+<<<<<<< History
       if (!mounted) return;
+=======
+      await LastKnownLocationStore.save(lat: p.latitude, lng: p.longitude);
+      if (!mounted) {
+        return;
+      }
+>>>>>>> main
 
       if (isTracking) {
         setState(() {
@@ -176,6 +229,10 @@ class _HomeMapPageState extends State<HomeMapPage> {
           polylines.removeWhere((poly) => poly.polylineId == const PolylineId('tracked_route'));
           polylines.add(Polyline(polylineId: const PolylineId('tracked_route'), points: List.from(trackedRoutePoints), width: 6, color: Colors.redAccent));
         });
+      }
+
+      if (navigationActive) {
+        await _updateNavigationProgress(p);
       }
 
       if (followUser && controller != null) {
@@ -335,7 +392,43 @@ class _HomeMapPageState extends State<HomeMapPage> {
       markers = {};
     });
 
+<<<<<<< History
     final directions = await service.directions(originLat: origin.latitude, originLng: origin.longitude, destLat: place.lat, destLng: place.lng);
+=======
+    final directions = await service.directions(
+      originLat: origin.latitude,
+      originLng: origin.longitude,
+      destLat: place.lat,
+      destLng: place.lng,
+    );
+
+    final durationSeconds = directions?.durationSeconds;
+    if (durationSeconds != null) {
+      final currentAvg = place.avgSeconds;
+      final currentSamples = place.samples;
+      final nextSamples = (currentSamples ?? 0) + 1;
+      final nextAvg = currentAvg == null
+          ? durationSeconds
+          : ((currentAvg * (currentSamples ?? 0)) + durationSeconds) ~/ nextSamples;
+
+      await SavedPlacesStore.set(
+        SavedPlace(
+          label: place.label,
+          name: place.name,
+          address: place.address,
+          lat: place.lat,
+          lng: place.lng,
+          placeId: place.placeId,
+          avgSeconds: nextAvg,
+          samples: nextSamples,
+        ),
+      );
+    }
+
+    if (!mounted) {
+      return;
+    }
+>>>>>>> main
 
     if (!mounted) return;
     final destLatLng = LatLng(place.lat, place.lng);
@@ -357,6 +450,158 @@ class _HomeMapPageState extends State<HomeMapPage> {
       searching = false;
       searchController.text = place.name;
     });
+
+    await _startMonitoringFor(place: place, directions: directions);
+  }
+
+  Future<void> _startMonitoringFor({required SavedPlace place, required DirectionsResult? directions}) async {
+    final origin = currentPosition;
+    if (origin != null) {
+      await LastKnownLocationStore.save(lat: origin.latitude, lng: origin.longitude);
+    }
+
+    await Workmanager().registerPeriodicTask(
+      'traffic_check',
+      trafficCheckTaskName,
+      frequency: const Duration(minutes: 15),
+      existingWorkPolicy: ExistingWorkPolicy.replace,
+    );
+
+    inAppTrafficTimer?.cancel();
+    inAppTrafficTimer = Timer.periodic(const Duration(minutes: 2), (_) => _checkTrafficNow());
+  }
+
+  Future<void> _checkTrafficNow() async {
+    final origin = currentPosition;
+    final service = googleService;
+    if (!mounted || origin == null || service == null) {
+      return;
+    }
+
+    const thresholdPct = 0.20;
+    const nearMeters = 1609.0;
+    final labels = await SavedPlacesStore.labels();
+    for (final label in labels) {
+      final saved = await SavedPlacesStore.get(label);
+      final avgSeconds = saved?.avgSeconds;
+      if (saved == null || avgSeconds == null) {
+        continue;
+      }
+
+      final distToDest = Geolocator.distanceBetween(
+        origin.latitude,
+        origin.longitude,
+        saved.lat,
+        saved.lng,
+      );
+      if (distToDest <= nearMeters) {
+        continue;
+      }
+
+      final directions = await service.directions(
+        originLat: origin.latitude,
+        originLng: origin.longitude,
+        destLat: saved.lat,
+        destLng: saved.lng,
+        alternatives: true,
+      );
+
+      final trafficSeconds = directions?.durationInTrafficSeconds ?? directions?.durationSeconds;
+      if (trafficSeconds == null) {
+        continue;
+      }
+
+      final thresholdSeconds = (avgSeconds * thresholdPct).round();
+      if (trafficSeconds > avgSeconds + thresholdSeconds) {
+        final deltaMinutes = ((trafficSeconds - avgSeconds) / 60).round();
+        final avgMinutes = (avgSeconds / 60).round();
+        final nowMinutes = (trafficSeconds / 60).round();
+        if (selectedPlace?.placeId == saved.placeId && directions != null) {
+          final points = directions.polylinePoints
+              .map((p) => LatLng(p[0], p[1]))
+              .toList(growable: false);
+          setState(() {
+            selectedDirections = directions;
+            polylines = {
+              Polyline(
+                polylineId: const PolylineId('route'),
+                points: points,
+                width: 5,
+                color: const Color(0xFF2F5CE5),
+              ),
+            };
+            navigationStepIndex = 0;
+          });
+        }
+
+        await NotificationService.instance.showTrafficAlert(
+          title: 'Traffic delay detected',
+          body: '${saved.name} is +$deltaMinutes min due to traffic (avg $avgMinutes → now $nowMinutes).',
+          payload: 'reroute',
+        );
+
+        await NotificationsStore.add(
+          HiWayNotification(
+            id: DateTime.now().microsecondsSinceEpoch.toString(),
+            title: saved.name,
+            subtitle: saved.address,
+            detail: '+$deltaMinutes min due to traffic',
+            createdAtMs: DateTime.now().millisecondsSinceEpoch,
+            read: false,
+            urgent: true,
+          ),
+        );
+        await _refreshUnread();
+      }
+    }
+  }
+
+  void _startInAppNavigation() {
+    final directions = selectedDirections;
+    if (directions == null || directions.steps.isEmpty) {
+      return;
+    }
+    setState(() {
+      navigationActive = true;
+      navigationStepIndex = 0;
+      followUser = true;
+    });
+  }
+
+  void _stopInAppNavigation() {
+    setState(() {
+      navigationActive = false;
+      navigationStepIndex = 0;
+    });
+  }
+
+  Future<void> _updateNavigationProgress(Position position) async {
+    final directions = selectedDirections;
+    if (directions == null || directions.steps.isEmpty) {
+      return;
+    }
+    if (navigationStepIndex >= directions.steps.length) {
+      _stopInAppNavigation();
+      return;
+    }
+
+    final step = directions.steps[navigationStepIndex];
+    final distanceMeters = Geolocator.distanceBetween(
+      position.latitude,
+      position.longitude,
+      step.endLat,
+      step.endLng,
+    );
+
+    if (distanceMeters < 35) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => navigationStepIndex += 1);
+      if (navigationStepIndex >= directions.steps.length) {
+        _stopInAppNavigation();
+      }
+    }
   }
 
   // --- Start Navigation & Save to History ---
@@ -401,22 +646,48 @@ class _HomeMapPageState extends State<HomeMapPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       key: scaffoldKey,
+<<<<<<< History
+=======
+      drawer: const AppDrawer(),
+>>>>>>> main
       appBar: AppBar(
         backgroundColor: const Color(0xFF2F5CE5),
         foregroundColor: Colors.white,
-        leading: IconButton(
+       leading: IconButton(
           icon: const Icon(Icons.menu),
-          onPressed: () {},
+          onPressed: () => scaffoldKey.currentState?.openDrawer(),
         ),
         title: const Text('HiWay', style: TextStyle(fontWeight: FontWeight.w700)),
         centerTitle: true,
         actions: [
           IconButton(
-            onPressed: () {},
-            icon: const Stack(
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const NotificationsPage()),
+              );
+              await _refreshUnread();
+            },
+            icon: Stack(
               clipBehavior: Clip.none,
               children: [
+<<<<<<< History
                 Icon(Icons.notifications_none),
+=======
+                const Icon(Icons.notifications_none),
+                if (hasUnreadNotifications)
+                  const Positioned(
+                    right: -1,
+                    top: -1,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Color(0xFFE53935),
+                        shape: BoxShape.circle,
+                      ),
+                      child: SizedBox(width: 8, height: 8),
+                    ),
+                  ),
+>>>>>>> main
               ],
             ),
           ),
@@ -555,7 +826,21 @@ class _HomeMapPageState extends State<HomeMapPage> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           if (searchController.text.isEmpty && recentSearches.isNotEmpty)
+<<<<<<< History
                             const Padding(padding: EdgeInsets.fromLTRB(12, 10, 12, 6), child: Row(children: [Text('Recent', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))])),
+=======
+                            const Padding(
+                              padding: EdgeInsets.fromLTRB(12, 10, 12, 6),
+                              child: Row(
+                                children: [
+                                  Text(
+                                    'Recent',
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                                  ),
+                                ],
+                              ),
+                            ),
+>>>>>>> main
                           if (searchController.text.isEmpty && recentSearches.isNotEmpty)
                             ListView.separated(
                               shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), itemCount: recentSearches.length, separatorBuilder: (context, index) => const Divider(height: 1),
@@ -606,9 +891,26 @@ class _HomeMapPageState extends State<HomeMapPage> {
                         const SizedBox(width: 10),
                         if (selectedDirections != null)
                           ElevatedButton(
+<<<<<<< History
                             style: ElevatedButton.styleFrom(backgroundColor: navigationActive ? Colors.red : const Color(0xFF2F5CE5), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), minimumSize: const Size(0, 0)),
                             onPressed: navigationActive ? _stopInAppNavigation : _startInAppNavigation,
                             child: Text(navigationActive ? 'Stop' : 'Start Navigation', style: const TextStyle(fontWeight: FontWeight.w700)),
+=======
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF2F5CE5),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              minimumSize: const Size(0, 0),
+                            ),
+                            onPressed: navigationActive ? _stopInAppNavigation : _startInAppNavigation,
+                            child: Text(
+                              navigationActive ? 'Stop' : 'Start',
+                              style: const TextStyle(fontWeight: FontWeight.w700),
+                            ),
+>>>>>>> main
                           )
                         else
                           const SizedBox.shrink(),
@@ -625,6 +927,11 @@ class _HomeMapPageState extends State<HomeMapPage> {
                               markers = {};
                             });
                             _stopInAppNavigation();
+<<<<<<< History
+=======
+                            Workmanager().cancelByUniqueName('traffic_check');
+                            inAppTrafficTimer?.cancel();
+>>>>>>> main
                           },
                           icon: const Icon(Icons.close),
                         ),
@@ -636,7 +943,17 @@ class _HomeMapPageState extends State<HomeMapPage> {
             ),
         ],
       ),
+<<<<<<< History
       floatingActionButton: navigationActive ? _NavigationBanner(directions: selectedDirections, onTap: _stopInAppNavigation) : null,
+=======
+      floatingActionButton: navigationActive
+          ? _NavigationBanner(
+              directions: selectedDirections,
+              stepIndex: navigationStepIndex,
+              onTap: _stopInAppNavigation,
+            )
+          : null,
+>>>>>>> main
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       bottomNavigationBar: BottomAppBar(
         height: 70, padding: const EdgeInsets.symmetric(horizontal: 18),
@@ -644,9 +961,34 @@ class _HomeMapPageState extends State<HomeMapPage> {
           children: [
             _BottomItem(icon: Icons.map_outlined, label: 'Map', selected: bottomIndex == 0, onPressed: () => setState(() => bottomIndex = 0)),
             const Spacer(),
+<<<<<<< History
             Container(width: 46, height: 46, decoration: BoxDecoration(color: isTracking ? Colors.red : const Color(0xFF2F5CE5), shape: BoxShape.circle), child: IconButton(onPressed: _toggleTracking, icon: Icon(isTracking ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white))),
             const Spacer(),
             _BottomItem(icon: Icons.history, label: 'History', selected: bottomIndex == 1, onPressed: () { Navigator.push(context, MaterialPageRoute(builder: (_) => const HistoryPage())).then((_) { setState(() => bottomIndex = 0); });}),
+=======
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: isTracking ? Colors.red : const Color(0xFF2F5CE5),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                onPressed: _toggleTracking,
+                icon: Icon(
+                  isTracking ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+            const Spacer(),
+            _BottomItem(
+              icon: Icons.history,
+              label: 'History',
+              selected: bottomIndex == 1,
+              onPressed: () => setState(() => bottomIndex = 1),
+            ),
+>>>>>>> main
           ],
         ),
       ),
@@ -736,6 +1078,80 @@ class _NavigationBanner extends StatelessWidget {
               const Icon(Icons.navigation, color: Color(0xFF2F5CE5)), const SizedBox(width: 10),
               Expanded(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [const Text("Navigating...", maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)), if (metaParts.isNotEmpty) ...[const SizedBox(height: 4), Text(metaParts.join(' • '), style: const TextStyle(fontSize: 12, color: Color(0xFF6F6F6F)))]])),
               const SizedBox(width: 10), const Text('Tap to stop', style: TextStyle(fontSize: 12, color: Color(0xFF8A8A8A))),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NavigationBanner extends StatelessWidget {
+  const _NavigationBanner({required this.directions, required this.stepIndex, required this.onTap});
+
+  final DirectionsResult? directions;
+  final int stepIndex;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final steps = directions?.steps ?? const [];
+    final step = stepIndex < steps.length ? steps[stepIndex] : null;
+
+    final text = step?.instruction.isNotEmpty == true ? step!.instruction : 'Continue';
+    final metaParts = <String>[];
+    if (step?.distanceText.isNotEmpty == true) {
+      metaParts.add(step!.distanceText);
+    }
+    if (step?.durationText.isNotEmpty == true) {
+      metaParts.add(step!.durationText);
+    }
+
+    return Material(
+      elevation: 10,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          width: double.infinity,
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE5E5E5)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.navigation, color: Color(0xFF2F5CE5)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      text,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                    ),
+                    if (metaParts.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        metaParts.join(' • '),
+                        style: const TextStyle(fontSize: 12, color: Color(0xFF6F6F6F)),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Text(
+                'Tap to stop',
+                style: TextStyle(fontSize: 12, color: Color(0xFF8A8A8A)),
+              ),
             ],
           ),
         ),

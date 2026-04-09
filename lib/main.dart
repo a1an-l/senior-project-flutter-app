@@ -1,9 +1,20 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'screens/landing_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'services/background_traffic_service.dart';
+import 'package:workmanager/workmanager.dart';
+
+import 'services/background_tasks.dart';
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
+
+  await NotificationService.instance.init(onTap: (_) {});
+  await NotificationService.instance.requestAndroidPermissionIfNeeded();
 
   try {
     await Supabase.initialize(
@@ -14,6 +25,14 @@ void main() async {
   } catch (e) {
     debugPrint('Supabase initialization error: $e');
   }
+
+  // Initialize background traffic service asynchronously (non-blocking)
+  print('[App] Initializing background traffic service...');
+  unawaited(BackgroundTrafficService.initialize().then((_) {
+    print('[App] Background traffic service initialized successfully');
+  }).catchError((e) {
+    print('[App] Error initializing background traffic service: $e');
+  }));
   
   runApp(const MyApp());
 }
