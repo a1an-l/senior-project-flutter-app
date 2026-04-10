@@ -129,7 +129,11 @@ class BackgroundTrafficService {
     // Cancel existing timer if running
     _trafficTimer?.cancel();
 
-    // Start new timer
+    // Perform immediate check
+    print('[TrafficDetection] Performing immediate traffic check...');
+    await performTrafficCheck();
+
+    // Start new timer for periodic checks
     _trafficTimer = Timer.periodic(
       Duration(minutes: intervalMinutes),
       (timer) async {
