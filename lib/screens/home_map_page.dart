@@ -22,6 +22,7 @@ import '../services/notification_service.dart';
 import '../services/background_tasks.dart';
 import 'package:workmanager/workmanager.dart';
 import '../services/notifications_store.dart';
+import '../services/supabase_notifications_service.dart';
 import 'notifications_page.dart';
 import 'location_input_page.dart';
 import 'history_page.dart';
@@ -665,16 +666,23 @@ class _HomeMapPageState extends State<HomeMapPage> {
           payload: 'reroute',
         );
 
-        await NotificationsStore.add(
-          HiWayNotification(
-            id: DateTime.now().microsecondsSinceEpoch.toString(),
-            title: saved.name,
-            subtitle: saved.address,
-            detail: '+$deltaMinutes min due to traffic',
-            createdAtMs: DateTime.now().millisecondsSinceEpoch,
-            read: false,
-            urgent: true,
-          ),
+        final notification = HiWayNotification(
+          id: DateTime.now().microsecondsSinceEpoch.toString(),
+          title: saved.name,
+          subtitle: saved.address,
+          detail: '+$deltaMinutes min due to traffic',
+          createdAtMs: DateTime.now().millisecondsSinceEpoch,
+          read: false,
+          urgent: true,
+        );
+        await NotificationsStore.add(notification);
+        
+        // Also save to Supabase
+        await SupabaseNotificationsService().saveNotification(
+          title: notification.title,
+          subtitle: notification.subtitle,
+          detail: notification.detail,
+          createdAtMs: notification.createdAtMs,
         );
         await _refreshUnread();
       }

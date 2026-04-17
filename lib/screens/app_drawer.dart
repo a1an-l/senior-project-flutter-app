@@ -192,7 +192,7 @@ class _AppDrawerState extends State<AppDrawer> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const TrafficSettingsPage(),
+                          builder: (_) => const TrafficSettingsPage(),
                         ),
                       );
                     },

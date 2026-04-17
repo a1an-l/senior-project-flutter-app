@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/notifications_store.dart';
+import '../services/supabase_notifications_service.dart';
 
 class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key});
@@ -12,6 +14,7 @@ class NotificationsPage extends StatefulWidget {
 class _NotificationsPageState extends State<NotificationsPage> {
   List<HiWayNotification> items = [];
   bool loading = true;
+  bool isGuest = false;
 
   @override
   void initState() {
@@ -20,6 +23,20 @@ class _NotificationsPageState extends State<NotificationsPage> {
   }
 
   Future<void> _load() async {
+    // Check if user is logged in
+    final prefs = await SharedPreferences.getInstance();
+    final int? userId = prefs.getInt('user_id');
+
+    if (userId == null) {
+      // User is a guest
+      if (!mounted) return;
+      setState(() {
+        isGuest = true;
+        loading = false;
+      });
+      return;
+    }
+
     final list = await NotificationsStore.list();
     await NotificationsStore.markAllRead();
     if (!mounted) {
@@ -27,12 +44,15 @@ class _NotificationsPageState extends State<NotificationsPage> {
     }
     setState(() {
       items = list;
+      isGuest = false;
       loading = false;
     });
   }
 
   Future<void> _clearAll() async {
     await NotificationsStore.clearAll();
+    // Also clear in Supabase
+    await SupabaseNotificationsService().clearAllAlerts();
     if (!mounted) {
       return;
     }
@@ -62,35 +82,69 @@ class _NotificationsPageState extends State<NotificationsPage> {
       ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                Expanded(
-                  child: ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-                    itemCount: items.length,
-                    separatorBuilder: (context, index) => const Divider(height: 18),
-                    itemBuilder: (context, index) {
-                      final n = items[index];
-                      return _NotificationRow(
-                        title: n.title,
-                        subtitle: n.subtitle,
-                        detail: n.detail,
-                        timeText: _formatTime(n.createdAtMs),
-                        urgent: n.urgent,
-                      );
-                    },
+          : isGuest
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.notifications_off_outlined,
+                          size: 64,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Log in to view notifications',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Sign in to your account to start receiving traffic alerts and notifications.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
+                )
+              : Column(
+                  children: [
+                    Expanded(
+                      child: ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                        itemCount: items.length,
+                        separatorBuilder: (context, index) => const Divider(height: 18),
+                        itemBuilder: (context, index) {
+                          final n = items[index];
+                          return _NotificationRow(
+                            title: n.title,
+                            subtitle: n.subtitle,
+                            detail: n.detail,
+                            timeText: _formatTime(n.createdAtMs),
+                            urgent: n.urgent,
+                          );
+                        },
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _clearAll,
+                      child: const Text(
+                        'Clear All',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                 ),
-                TextButton(
-                  onPressed: _clearAll,
-                  child: const Text(
-                    'Clear All',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
-                const SizedBox(height: 8),
-              ],
-            ),
     );
   }
 }

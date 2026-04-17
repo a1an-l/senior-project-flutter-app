@@ -1,5 +1,6 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'notifications_store.dart';
+import 'supabase_notifications_service.dart';
 import 'dart:math';
 
 class NotificationService {
@@ -105,6 +106,14 @@ class NotificationService {
       urgent: true,
     );
     await NotificationsStore.add(notification);
+    
+    // Also save to Supabase
+    await SupabaseNotificationsService().saveNotification(
+      title: notification.title,
+      subtitle: notification.subtitle,
+      detail: notification.detail,
+      createdAtMs: notification.createdAtMs,
+    );
   }
 
   Future<void> showCongestedTrafficAlert(double radiusMiles) async {
@@ -130,6 +139,14 @@ class NotificationService {
       urgent: false,
     );
     await NotificationsStore.add(notification);
+    
+    // Also save to Supabase
+    await SupabaseNotificationsService().saveNotification(
+      title: notification.title,
+      subtitle: notification.subtitle,
+      detail: notification.detail,
+      createdAtMs: notification.createdAtMs,
+    );
   }
 
   // Cancel methods (from Traffic-Radius)

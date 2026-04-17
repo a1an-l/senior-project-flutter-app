@@ -5,6 +5,7 @@ import '../services/google_places_directions_service.dart';
 import '../services/saved_places.dart';
 import '../services/notification_service.dart';
 import '../services/notifications_store.dart';
+import '../services/supabase_notifications_service.dart';
 
 class LocationInputPage extends StatefulWidget {
   final String title;
@@ -125,17 +126,25 @@ class _LocationInputPageState extends State<LocationInputPage> {
     await SavedPlacesStore.set(saved);
 
     Future.delayed(const Duration(seconds: 10), () async {
-      await NotificationsStore.add(
-        HiWayNotification(
-          id: DateTime.now().microsecondsSinceEpoch.toString(),
-          title: 'Test Notification',
-          subtitle: 'Saved ${widget.title}',
-          detail: 'This is a test alert after saving.',
-          createdAtMs: DateTime.now().millisecondsSinceEpoch,
-          read: false,
-          urgent: true,
-        ),
+      final notification = HiWayNotification(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        title: 'Test Notification',
+        subtitle: 'Saved ${widget.title}',
+        detail: 'This is a test alert after saving.',
+        createdAtMs: DateTime.now().millisecondsSinceEpoch,
+        read: false,
+        urgent: true,
       );
+      await NotificationsStore.add(notification);
+      
+      // Also save to Supabase
+      await SupabaseNotificationsService().saveNotification(
+        title: notification.title,
+        subtitle: notification.subtitle,
+        detail: notification.detail,
+        createdAtMs: notification.createdAtMs,
+      );
+      
       await NotificationService.instance.showTrafficAlert(
         title: 'Test Notification',
         body: 'Saved ${widget.title}. This is a test alert.',
