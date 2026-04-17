@@ -1,130 +1,41 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:image_picker/image_picker.dart';
+import '/services/profile_service.dart';
 
 class EditProfilePage extends StatefulWidget {
-  const EditProfilePage({super.key});
+  final int userId;
+  final String currentUsername;
+  final String currentEmail;
+
+  const EditProfilePage({
+    super.key,
+    required this.userId,
+    required this.currentUsername,
+    required this.currentEmail,
+  });
 
   @override
   State<EditProfilePage> createState() => _EditProfilePageState();
 }
 
 class _EditProfilePageState extends State<EditProfilePage> {
-  final TextEditingController _usernameController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
+  final _profileService = ProfileService();
+  final _usernameController = TextEditingController();
+  final _emailController = TextEditingController();
 
-  
-  bool _isLoading = true;
-  bool _isSaving = false;
-  String? _errorMessage;
+
+  File? _pickedImageFile;       // newly picked local file
+  String? _currentPhotoUrl;    // loaded from Supabase
+  bool _isLoading = false;
+  bool _isPhotoLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _loadProfile(); 
-  }
-
-
-  // fetch the current users profile and populates the text fields 
-  Future<void> _loadProfile() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final int? userId = prefs.getInt('user_id'); //fetch userId
-
-
-      if (userId == null) {
-        setState(() {
-          _errorMessage = 'Log in to edit your profile.';
-          _isLoading = false;
-        });
-        return;
-      }
-
-      final data = await Supabase.instance.client
-          .from('users')
-          .select('username, email')
-          .eq('user_id', userId)
-          .maybeSingle(); //null if no row found
-
-      if (data != null) {
-        _usernameController.text = data['username'] ?? '';
-        _emailController.text = data['email'] ?? '';
-      } else {
-        _errorMessage = 'Profile not found.';
-      }
-    } catch (e) {
-      _errorMessage = 'Failed to load profile.';
-      debugPrint('LOAD PROFILE ERROR: $e');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  //update new username / email
-  Future<void> _onSubmit() async {
-    final username = _usernameController.text.trim();
-    final email = _emailController.text.trim();
-
-    //check if either field is blank
-    if (username.isEmpty || email.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Username and email cannot be empty.')),
-      );
-      return;
-    }
-
-    setState(() {
-      _isSaving = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final int? userId = prefs.getInt('user_id');
-      
-      if (userId == null) {
-        throw Exception('No logged in user found.');
-      }
-
-      //query user table and update username/email
-      await Supabase.instance.client
-          .from('users')
-          .update({
-            'username': username,
-            'email': email,
-          })
-          .eq('user_id', userId);
-      //return to app drawer page 
-      if (mounted) {
-        Navigator.pop(context, true);
-      }
-    } catch (e) {
-      debugPrint('update profile error: $e');
-
-      if (mounted) {
-        setState(() {
-          _errorMessage = 'Failed to update profile.';
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to update profile.')),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSaving = false;
-        });
-      }
-    }
-  }
-
-  void _onChangePicture() {
-    
+    _usernameController.text = widget.currentUsername;
+    _emailController.text = widget.currentEmail;
+    _loadCurrentPhoto();
   }
 
   @override
@@ -133,173 +44,318 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _emailController.dispose();
     super.dispose();
   }
+Future<void> _onSubmit() async {
+  final username = _usernameController.text.trim();
+  final email = _emailController.text.trim();
+
+  if (username.isEmpty || email.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Username and email cannot be empty.')),
+    );
+    return;
+  }
+
+  setState(() {
+    _isLoading = true;
+  });
+
+  try {
+    await _profileService.updateProfile(
+      userId: widget.userId,
+      username: username,
+      email: email,
+    );
+
+    if (mounted) {
+      Navigator.pop(context, true);
+    }
+  } catch (e) {
+    debugPrint('update profile error: $e');
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to update profile.')),
+      );
+    }
+  } finally {
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+}
+  Future<void> _loadCurrentPhoto() async {
+    setState(() => _isPhotoLoading = true);
+    try {
+      final url = await _profileService.getProfilePhotoUrl(widget.userId);
+      if (mounted) setState(() => _currentPhotoUrl = url);
+    } catch (_) {
+      // No photo yet 
+    } finally {
+      if (mounted) setState(() => _isPhotoLoading = false);
+    }
+  }
+
+  Future<void> _pickAndUploadPhoto() async {
+    // Let user choose source
+    final source = await _showImageSourceDialog();
+    if (source == null) return;
+
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: source,
+      imageQuality: 80,
+      maxWidth: 800,
+    );
+    if (picked == null) return;
+
+    setState(() {
+      _pickedImageFile = File(picked.path);
+      _isLoading = true;
+    });
+
+    try {
+      final url = await _profileService.updateProfilePhoto(
+        userId: widget.userId,
+        imageFile: _pickedImageFile!,
+      );
+      setState(() => _currentPhotoUrl = url);
+      _showSnack('Profile picture updated!', isError: false);
+    } catch (e) {
+      _showSnack('Failed to upload photo: $e');
+      setState(() => _pickedImageFile = null); // revert preview on error
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<ImageSource?> _showImageSourceDialog() {
+    return showModalBottomSheet<ImageSource>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 12),
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Take a photo'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Choose from gallery'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+  Future<void> _sendPasswordResetEmail() async {
+  final email = _emailController.text.trim();
+
+  if (email.isEmpty) {
+    _showSnack('Email cannot be empty.');
+    return;
+  }
+
+  setState(() => _isLoading = true);
+
+  try {
+    await _profileService.sendPasswordResetEmail(email);
+    _showSnack('Password reset email sent. Check your inbox.', isError: false);
+  } catch (e) {
+    _showSnack('Failed to send reset email: $e');
+  } finally {
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+  }
+}
+
+  void _showSnack(String message, {bool isError = true}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red[700] : Colors.green[700],
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+  }
+
+  Widget _buildAvatar() {
+    ImageProvider? provider;
+
+    if (_pickedImageFile != null) {
+      provider = FileImage(_pickedImageFile!);
+    } else if (_currentPhotoUrl != null) {
+      provider = NetworkImage(_currentPhotoUrl!);
+    }
+
+    return Stack(
+      alignment: Alignment.bottomRight,
+      children: [
+        CircleAvatar(
+          radius: 52,
+          backgroundColor: Colors.white24,
+          backgroundImage: provider,
+          child: provider == null
+              ? const Icon(Icons.person, size: 52, color: Colors.white)
+              : null,
+        ),
+        GestureDetector(
+          onTap: _isLoading ? null : _pickAndUploadPhoto,
+          child: Container(
+            padding: const EdgeInsets.all(6),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.camera_alt,
+                size: 18, color: Color(0xFF1A6FD4)),
+          ),
+        ),
+      ],
+    );
+  }
+
 
   @override
   Widget build(BuildContext context) {
-    const primaryBlue = Color(0xFF2979FF);
-
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F4F7),
-      body: Column(
+      backgroundColor: const Color(0xFFF5F5F5),
+      body: Stack(
         children: [
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF1A6FD4),
-                  Color(0xFF2196F3),
-                ],
-              ),
-            ),
-            child: SafeArea(
-              bottom: false,
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
+          CustomScrollView(
+            slivers: [
+              SliverAppBar(
+                expandedHeight: 220,
+                pinned: true,
+                flexibleSpace: FlexibleSpaceBar(
+                  background: Container(
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFF1A6FD4), Color(0xFF2196F3)],
+                      ),
                     ),
-                    child: Stack(
-                      alignment: Alignment.center,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: GestureDetector(
-                            onTap: () => Navigator.maybePop(context),
-                            child: const Icon(
-                              Icons.chevron_left,
-                              color: Colors.white,
-                              size: 28,
-                            ),
-                          ),
-                        ),
-                        const Text(
-                          'Edit Profile',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.2,
-                          ),
+                        const SizedBox(height: 40),
+                        _isPhotoLoading
+                            ? const CircularProgressIndicator(
+                                color: Colors.white)
+                            : _buildAvatar(),
+                        const SizedBox(height: 8),
+                        TextButton.icon(
+                          onPressed: _isLoading ? null : _pickAndUploadPhoto,
+                          icon: const Icon(Icons.edit,
+                              size: 14, color: Colors.white70),
+                          label: const Text('Change Picture',
+                              style: TextStyle(color: Colors.white70)),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Container(
-                    width: 88,
-                    height: 88,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.person,
-                      size: 56,
-                      color: Colors.black87,
-                    ),
+                ),
+                leading: IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  onPressed: () => Navigator.pop(context),
+                ),
+                backgroundColor: const Color(0xFF1A6FD4),
+                title: const Text('Edit Profile',
+                    style: TextStyle(color: Colors.white)),
+              ),
+
+              // ── Form body ──
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _ProfileTextField(
+                        controller: _usernameController,
+                        label: 'Username',
+                        icon: Icons.person_outline,
+                      ),
+                      const SizedBox(height: 16),
+                      _ProfileTextField(
+                        controller: _emailController,
+                        label: 'Email',
+                        icon: Icons.email_outlined,
+                        keyboardType: TextInputType.emailAddress,
+                      ),
+                      const SizedBox(height: 24),
+
+                      //Reset password button 
+                      OutlinedButton.icon(
+                        onPressed: _isLoading ? null : _sendPasswordResetEmail,
+                        icon: const Icon(Icons.lock_outline,
+                            color: Color(0xFF1A6FD4)),
+                        label: const Text('Reset Password',
+                            style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1A6FD4))),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Color(0xFF1A6FD4)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // ── Submit ──
+                      ElevatedButton(
+                        onPressed: _isLoading ? null : _onSubmit,
+          
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1A6FD4),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text('SUBMIT CHANGES',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _onChangePicture,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black87,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 10,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: const Text(
-                      'Change Picture',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                ],
+                ),
+              ),
+            ],
+          ),
+
+          // Global loading overlay
+          if (_isLoading)
+            Container(
+              color: Colors.black26,
+              child: const Center(
+                child: CircularProgressIndicator(color: Color(0xFF1A6FD4)),
               ),
             ),
-          ),
-          Expanded(
-            child: Container(
-              color: const Color(0xFFF2F4F7),
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 32,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (_errorMessage != null) ...[
-                            Text(
-                              _errorMessage!,
-                              style: const TextStyle(
-                                color: Colors.red,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                          ],
-                          _ProfileTextField(
-                            controller: _usernameController,
-                            label: 'User name',
-                          ),
-                          const SizedBox(height: 16),
-                          _ProfileTextField(
-                            controller: _emailController,
-                            label: 'Email',
-                            keyboardType: TextInputType.emailAddress,
-                          ),
-                          const SizedBox(height: 32),
-                          ElevatedButton(
-                            onPressed: _isSaving ? null : _onSubmit,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: primaryBlue,
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                            child: _isSaving
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Text(
-                                    'SUBMIT CHANGES',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 1.1,
-                                    ),
-                                  ),
-                          ),
-                        ],
-                      ),
-                    ),
-            ),
-          ),
         ],
       ),
     );
@@ -309,12 +365,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
 class _ProfileTextField extends StatelessWidget {
   final TextEditingController controller;
   final String label;
-  final TextInputType keyboardType;
+  final IconData icon;
+  final TextInputType? keyboardType;
 
   const _ProfileTextField({
     required this.controller,
     required this.label,
-    this.keyboardType = TextInputType.text,
+    required this.icon,
+    this.keyboardType,
   });
 
   @override
@@ -322,21 +380,23 @@ class _ProfileTextField extends StatelessWidget {
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
-      style: const TextStyle(fontSize: 15, color: Colors.black87),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(fontSize: 13, color: Colors.black45),
+        prefixIcon: Icon(icon, color: const Color(0xFF1A6FD4)),
         filled: true,
         fillColor: Colors.white,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFDDE1E7), width: 1.2),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade200),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF2979FF), width: 1.5),
+          borderRadius: BorderRadius.circular(12),
+          borderSide:
+              const BorderSide(color: Color(0xFF1A6FD4), width: 1.5),
         ),
       ),
     );

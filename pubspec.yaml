@@ -44,6 +44,7 @@ dependencies:
   wakelock_plus: ^1.5.1
   flutter_local_notifications: ^19.4.0
   workmanager: ^0.7.0
+  image_picker: ^1.0.7
 
 dev_dependencies:
   flutter_test:

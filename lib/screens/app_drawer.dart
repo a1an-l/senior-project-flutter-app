@@ -122,22 +122,55 @@ class _AppDrawerState extends State<AppDrawer> {
                 children: [
                   const SizedBox(height: 8),
                  _DrawerItem(
-                    icon: Icons.person_outline,
-                    label: 'Profile',
-                    subtitle: 'View and Edit your profile',
-                    onTap: () async {
+                  icon: Icons.person_outline,
+                  label: 'Profile',
+                  subtitle: 'View and Edit your profile',
+                  onTap: () async {
+                    try {
+                      final prefs = await SharedPreferences.getInstance();
+                      final int? userId = prefs.getInt('user_id');
+
+                      if (userId == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Please sign in to view your profile.')),
+                        );
+                        return;
+                      }
+
+                      final supabase = Supabase.instance.client;
+
+                      // Reuse the same query pattern as loadUsername(), just grab email too
+                      final data = await supabase
+                          .from('users')
+                          .select('username, email')
+                          .eq('user_id', userId)
+                          .maybeSingle();
+
+                      if (data == null || !mounted) return;
+
                       final updated = await Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => const EditProfilePage(),
+                          builder: (_) => EditProfilePage(
+                            userId: userId,
+                            currentUsername: data['username'] ?? '',
+                            currentEmail: data['email'] ?? '',
+                          ),
                         ),
                       );
 
                       if (updated == true && mounted) {
                         await loadUsername();
                       }
-                    },
-                  ),
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Failed to load profile: $e')),
+                        );
+                      }
+                    }
+                  },
+                ),
                   _DrawerItem(
                     icon: Icons.route_outlined,
                     label: 'My Routes',
