@@ -13,8 +13,8 @@ import '../services/route_service.dart';
 import '../services/history_service.dart';
 
 // --- Manual Track Imports ---
-import '../services/route_service.dart'; 
-import 'package:wakelock_plus/wakelock_plus.dart'; 
+import '../services/route_service.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 // --- Main Branch Imports ---
 import '../services/last_known_location_store.dart';
@@ -25,7 +25,6 @@ import '../services/notifications_store.dart';
 import 'notifications_page.dart';
 import 'location_input_page.dart';
 import 'history_page.dart';
-
 
 class HomeMapPage extends StatefulWidget {
   const HomeMapPage({super.key});
@@ -69,6 +68,13 @@ class _HomeMapPageState extends State<HomeMapPage> {
   int navigationStepIndex = 0;
   bool hasUnreadNotifications = false;
 
+  // --- New Rerouting & Camera Variables ---
+  bool isRerouting = false;
+  int offRouteCount = 0;
+  final double arrivalThresholdMeters = 50.0;
+  bool _isProgrammaticCameraMove = false;
+  final double offRouteThresholdMeters = 75.0; // Reroute if >75m off path
+
   static const CameraPosition initialCameraPosition = CameraPosition(
     target: LatLng(26.3017, -98.1633),
     zoom: 12,
@@ -109,6 +115,62 @@ class _HomeMapPageState extends State<HomeMapPage> {
       print("🛑 DEBUG: API Key loaded successfully.");
     } catch (e) {
       print("🛑 DEBUG ERROR: Failed to load API key! Error: $e");
+    }
+  }
+
+  // --- Feature 2: Off-Route Detection ---
+  bool _isUserOffRoute(Position currentPos) {
+    if (selectedDirections == null) return false;
+
+    double minDistance = double.infinity;
+    // Find the closest point on our current polyline to the user
+    for (var p in selectedDirections!.polylinePoints) {
+      final dist = Geolocator.distanceBetween(
+          currentPos.latitude, currentPos.longitude, p[0], p[1]);
+      if (dist < minDistance) {
+        minDistance = dist;
+      }
+    }
+    return minDistance > offRouteThresholdMeters;
+  }
+
+  // --- Feature 2: Recalculate Route ---
+  Future<void> _recalculateRoute(Position currentPos) async {
+    // Prevent multiple simultaneous API calls
+    if (isRerouting || selectedPlace == null || googleService == null) return;
+
+    setState(() => isRerouting = true);
+    print("🛑 DEBUG: User off route. Recalculating directions...");
+
+    try {
+      final directions = await googleService!.directions(
+        originLat: currentPos.latitude,
+        originLng: currentPos.longitude,
+        destLat: selectedPlace!.lat,
+        destLng: selectedPlace!.lng,
+        alternatives: false,
+      );
+
+      if (directions != null && mounted) {
+        final points = directions.polylinePoints.map((p) => LatLng(p[0], p[1])).toList(growable: false);
+
+        setState(() {
+          selectedDirections = directions;
+          polylines.removeWhere((p) => p.polylineId == const PolylineId('route'));
+          polylines.add(Polyline(
+            polylineId: const PolylineId('route'),
+            points: points,
+            width: 5,
+            color: const Color(0xFF2F5CE5),
+          ));
+          navigationStepIndex = 0; // Reset steps to the beginning of new route
+        });
+        print("🛑 DEBUG: Rerouting successful.");
+      }
+    } catch (e) {
+      print("🛑 DEBUG ERROR: Rerouting failed: $e");
+    } finally {
+      if (mounted) setState(() => isRerouting = false);
     }
   }
 
@@ -200,13 +262,11 @@ class _HomeMapPageState extends State<HomeMapPage> {
 
     positionSubscription?.cancel();
     positionSubscription = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 3),
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.bestForNavigation, distanceFilter: 1), //High-frequency polling, updates every 1 meter for smoothness
     ).listen((p) async {
       currentPosition = p;
       await LastKnownLocationStore.save(lat: p.latitude, lng: p.longitude);
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       if (isTracking) {
         setState(() {
@@ -218,10 +278,94 @@ class _HomeMapPageState extends State<HomeMapPage> {
 
       if (navigationActive) {
         await _updateNavigationProgress(p);
+
+        // 1. ARRIVAL DETECTION
+        if (selectedPlace != null) {
+          final distToDest = Geolocator.distanceBetween(
+              p.latitude, p.longitude, selectedPlace!.lat, selectedPlace!.lng);
+
+          if (distToDest <= arrivalThresholdMeters) {
+            _stopInAppNavigation(); // Stops tracking, resets UI
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('🎉 You have reached your destination!'),
+                  backgroundColor: Colors.green,
+                  duration: Duration(seconds: 4),
+                ),
+              );
+            }
+            return; // Stop processing further for this tick
+          }
+        }
+
+        // 2. ANTI-FLAPPING REROUTE (Debounce)
+        if (_isUserOffRoute(p)) {
+          offRouteCount++;
+          if (offRouteCount >= 3) {
+            _recalculateRoute(p);
+            offRouteCount = 0;
+          }
+        } else {
+          offRouteCount = 0;
+        }
+
+        // --- NEW: 3. "EAT" THE ROUTE BEHIND THE USER ---
+        if (selectedDirections != null && selectedDirections!.polylinePoints.isNotEmpty) {
+          int closestIndex = 0;
+          double minDistance = double.infinity;
+
+          for (int i = 0; i < selectedDirections!.polylinePoints.length; i++) {
+            final point = selectedDirections!.polylinePoints[i];
+            final dist = Geolocator.distanceBetween(p.latitude, p.longitude, point[0], point[1]);
+            if (dist < minDistance) {
+              minDistance = dist;
+              closestIndex = i;
+            }
+          }
+
+          // If we have passed a few points, slice them off the array and redraw
+          if (closestIndex > 2) {
+            selectedDirections!.polylinePoints.removeRange(0, closestIndex - 1);
+
+            final updatedPoints = selectedDirections!.polylinePoints
+                .map((pt) => LatLng(pt[0], pt[1]))
+                .toList(growable: false);
+
+            setState(() {
+              polylines.removeWhere((poly) => poly.polylineId == const PolylineId('route'));
+              polylines.add(Polyline(
+                polylineId: const PolylineId('route'),
+                points: updatedPoints,
+                width: 5,
+                color: const Color(0xFF2F5CE5),
+              ));
+            });
+          }
+        }
+        // --- END OF EAT ROUTE LOGIC ---
       }
 
       if (followUser && controller != null) {
-        await controller!.animateCamera(CameraUpdate.newLatLng(LatLng(p.latitude, p.longitude)));
+        _isProgrammaticCameraMove = true; // Tell the map WE are moving the camera
+        // --- NEW: Dynamic Navigation Camera ---
+        if (navigationActive) {
+          await controller!.animateCamera(CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: LatLng(p.latitude, p.longitude),
+              zoom: 18.5,       // Zoom in close
+              tilt: 55.0,       // 3D Tilt effect
+              bearing: p.heading, // Rotate map to match user's travel direction
+            ),
+          ));
+        } else {
+          // Standard top-down follow
+          await controller!.animateCamera(CameraUpdate.newLatLng(LatLng(p.latitude, p.longitude)));
+        }
+        // Allow gestures to register again after the animation completes
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) _isProgrammaticCameraMove = false;
+        });
       }
     });
 
@@ -537,12 +681,17 @@ class _HomeMapPageState extends State<HomeMapPage> {
     }
   }
 
- 
-
   void _stopInAppNavigation() {
     setState(() {
       navigationActive = false;
       navigationStepIndex = 0;
+
+      // --- NEW: Clear map data completely upon stopping/arrival ---
+      selectedPlace = null;
+      selectedDirections = null;
+      searchController.clear();
+      polylines.removeWhere((p) => p.polylineId != const PolylineId('tracked_route'));
+      markers = {};
     });
   }
 
@@ -581,6 +730,24 @@ class _HomeMapPageState extends State<HomeMapPage> {
       navigationActive = true;
       followUser = true;
     });
+    // --- NEW: Lock the map from registering a user swipe during the swoop ---
+    _isProgrammaticCameraMove = true;
+    // --- NEW: Swoop camera into Navigation Mode immediately ---
+    if (currentPosition != null && controller != null) {
+      await controller!.animateCamera(CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: LatLng(currentPosition!.latitude, currentPosition!.longitude),
+          zoom: 18.5,
+          tilt: 55.0,
+          bearing: currentPosition!.heading,
+        ),
+      ));
+    }
+
+    // Release the lock after the animation finishes (1 second is safe)
+    Future.delayed(const Duration(milliseconds: 1000), () {
+      if (mounted) _isProgrammaticCameraMove = false;
+    });
     try {
       final prefs = await SharedPreferences.getInstance();
       final int? currentUserId = prefs.getInt('user_id');
@@ -618,7 +785,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF2F5CE5),
         foregroundColor: Colors.white,
-       leading: IconButton(
+        leading: IconButton(
           icon: const Icon(Icons.menu),
           onPressed: () => scaffoldKey.currentState?.openDrawer(),
         ),
@@ -661,17 +828,26 @@ class _HomeMapPageState extends State<HomeMapPage> {
           GoogleMap(
             initialCameraPosition: initialCameraPosition,
             myLocationEnabled: myLocationEnabled,
-            myLocationButtonEnabled: true,
+            myLocationButtonEnabled: true, // Native button re-enabled for demo
             zoomControlsEnabled: false,
             markers: markers,
             polylines: polylines,
-            onCameraMoveStarted: () => followUser = false,
+
+            // --- NEW: Use the built-in callback, but check our flag ---
+            onCameraMoveStarted: () {
+              // Only trigger if we are navigating AND the code isn't moving the camera
+              if (navigationActive && !_isProgrammaticCameraMove) {
+                setState(() => followUser = false);
+              }
+            },
+
             onTap: (_) => FocusScope.of(context).unfocus(),
             onMapCreated: (value) {
               controller = value;
               if (myLocationEnabled) _initLocation();
             },
           ),
+
           if (searchExpanded)
             Positioned.fill(
               child: GestureDetector(
@@ -823,7 +999,9 @@ class _HomeMapPageState extends State<HomeMapPage> {
               ),
             ),
           ),
-          if (selectedPlace != null)
+
+          // --- Top UI Panel: Hidden during active navigation ---
+          if (selectedPlace != null && !navigationActive)
             SafeArea(
               child: Align(
                 alignment: Alignment.bottomCenter,
@@ -895,10 +1073,10 @@ class _HomeMapPageState extends State<HomeMapPage> {
       ),
       floatingActionButton: navigationActive
           ? _NavigationBanner(
-              directions: selectedDirections,
-              stepIndex: navigationStepIndex,
-              onTap: _stopInAppNavigation,
-            )
+        directions: selectedDirections,
+        stepIndex: navigationStepIndex,
+        onTap: _stopInAppNavigation,
+      )
           : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       bottomNavigationBar: BottomAppBar(
@@ -928,10 +1106,10 @@ class _HomeMapPageState extends State<HomeMapPage> {
               label: 'History',
               selected: bottomIndex == 1,
               onPressed: () {Navigator.push(context,
-               MaterialPageRoute(builder: (_) => const HistoryPage())).then((_) {
-                 setState(() => bottomIndex = 0);
-                  });
-                  },
+                  MaterialPageRoute(builder: (_) => const HistoryPage())).then((_) {
+                setState(() => bottomIndex = 0);
+              });
+              },
             ),
           ],
         ),
@@ -998,7 +1176,6 @@ class _RouteInfoRow extends StatelessWidget {
   }
 }
 
-
 class _NavigationBanner extends StatelessWidget {
   const _NavigationBanner({required this.directions, required this.stepIndex, required this.onTap});
 
@@ -1023,50 +1200,62 @@ class _NavigationBanner extends StatelessWidget {
     return Material(
       elevation: 10,
       borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          width: double.infinity,
-          margin: const EdgeInsets.symmetric(horizontal: 16),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE5E5E5)),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.navigation, color: Color(0xFF2F5CE5)),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+      // I removed the InkWell here so the user specifically has to press the Stop button
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE5E5E5)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.navigation, color: Color(0xFF2F5CE5)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    text,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                  ),
+                  if (metaParts.isNotEmpty) ...[
+                    const SizedBox(height: 4),
                     Text(
-                      text,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                      metaParts.join(' • '),
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF6F6F6F)),
                     ),
-                    if (metaParts.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        metaParts.join(' • '),
-                        style: const TextStyle(fontSize: 12, color: Color(0xFF6F6F6F)),
-                      ),
-                    ],
                   ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+
+            // --- NEW BLUE STOP BUTTON ---
+            GestureDetector(
+              onTap: onTap, // This triggers the _stopInAppNavigation function
+              child: Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2F5CE5),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.stop,
+                  color: Colors.white,
+                  size: 28,
                 ),
               ),
-              const SizedBox(width: 10),
-              const Text(
-                'Tap to stop',
-                style: TextStyle(fontSize: 12, color: Color(0xFF8A8A8A)),
-              ),
-            ],
-          ),
+            ),
+
+          ],
         ),
       ),
     );
