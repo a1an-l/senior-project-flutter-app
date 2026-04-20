@@ -13,6 +13,7 @@ class AppDrawer extends StatefulWidget {
 
 class _AppDrawerState extends State<AppDrawer> {
   String username = '';
+  String? photoUrl;
 
   @override
   void initState() {
@@ -32,6 +33,7 @@ class _AppDrawerState extends State<AppDrawer> {
       if (userId == null) {
         setState(() {
           username = 'Guest!';
+          photoUrl = null;
         });
         return;
       }
@@ -40,23 +42,28 @@ class _AppDrawerState extends State<AppDrawer> {
 
       final data = await supabase
           .from('users')
-          .select('username')
+          .select('username, photo')
           .eq('user_id', userId)
           .maybeSingle();
 
       if (data != null) {
+        final photo = data['photo'];
+
         setState(() {
           username = data['username'] ?? '';
+          photoUrl = photo is Map ? photo['url'] as String? : null;
         });
       } else {
         setState(() {
           username = '';
+          photoUrl = null;
         });
       }
     } catch (e) {
       debugPrint('LOADUSERNAME ERROR: $e');
       setState(() {
         username = '';
+        photoUrl = null;
       });
     }
   }
@@ -93,14 +100,18 @@ class _AppDrawerState extends State<AppDrawer> {
                   ),
                 ),
                 // Avatar
-                Container(
-                  width: 80,
-                  height: 80,
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
+                CircleAvatar(
+                    radius: 40,
+                    backgroundColor: Colors.white,
+                    backgroundImage: photoUrl != null ? NetworkImage(photoUrl!) : null,
+                    child: photoUrl == null
+                        ? const Icon(
+                            Icons.person,
+                            size: 40,
+                            color: Color(0xFF1A6FD4),
+                          )
+                        : null,
                   ),
-                ),
                 const SizedBox(height: 14),
                 Text(
                   username.isEmpty ? 'Hi!' : 'Hi $username!', //defualt to Hi if not signed in

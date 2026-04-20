@@ -1,12 +1,16 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'screens/landing_page.dart';
+import 'screens/reset_password.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/background_traffic_service.dart';
 import 'package:workmanager/workmanager.dart';
 
 import 'services/background_tasks.dart';
 import 'services/notification_service.dart';
+
+
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,14 +41,63 @@ void main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+
+
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
   @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  StreamSubscription<AuthState>? _authSub;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _authSub = Supabase.instance.client.auth.onAuthStateChange.listen(
+      (data) {
+        final event = data.event;
+
+        if (event == AuthChangeEvent.passwordRecovery) {
+          appNavigatorKey.currentState?.push(
+            MaterialPageRoute(
+              builder: (_) => const ResetPasswordPage(),
+            ),
+          );
+        }
+      },
+      onError: (error) {
+        debugPrint('Auth state listener error: $error');
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
+      navigatorKey: appNavigatorKey,
       debugShowCheckedModeBanner: false,
-      home: LandingPage(),
+      home: const LandingPage(),
     );
   }
 }
+// class MyApp extends StatelessWidget {
+//   const MyApp({super.key});
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return const MaterialApp(
+//       debugShowCheckedModeBanner: false,
+//       home: LandingPage(),
+//     );
+//   }
+//}

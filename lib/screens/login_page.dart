@@ -47,11 +47,25 @@ class _LoginPageState extends State<LoginPage> {
           .maybeSingle(); // maybeSingle returns null if no match is found
 
       if (data != null) {
+
+        //log in with supabase auth for password reset/profile pic change ---B
+        try {
+          final authResponse = await Supabase.instance.client.auth.signInWithPassword(
+            email: _emailController.text.trim(),
+            password: hashedInputPassword,
+          );
+          print('Supabase auth sign-in succeeded: ${authResponse.user?.email}');
+        } catch (e) {
+          print('Supabase auth sign-in failed: $e');
+          rethrow;
+        }
+
+        //--------------------------------------------------B
+
         // --- ADDED: Save the User ID to the phone's memory ---
         final prefs = await SharedPreferences.getInstance();
         // We grab the 'user_id' from the Supabase row and save it locally
         await prefs.setInt('user_id', data['user_id'] as int);
-        // -----------------------------------------------------
 
         // Success: Transition to home page
         if (mounted) {
@@ -65,7 +79,7 @@ class _LoginPageState extends State<LoginPage> {
         setState(() {
           _errorMessage = "Email and password do not match our records.";
         });
-      }
+      }  
     } catch (e) {
       setState(() {
         _errorMessage = "An unexpected error occurred. Please try again.";

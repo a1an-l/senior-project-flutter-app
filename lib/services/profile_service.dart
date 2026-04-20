@@ -20,32 +20,36 @@ class ProfileService {
   }
 
   /// Uploads image to Supabase Storage and saves the URL into the photo JSONB column.
-  Future<String> updateProfilePhoto({
-    required int userId,
-    required File imageFile,
-  }) async {
-    final ext = imageFile.path.split('.').last;
-    final filePath = 'avatars/avatar_$userId.$ext';
+Future<String> updateProfilePhoto({
+  required int userId,
+  required File imageFile,
+}) async {
+  final ext = imageFile.path.split('.').last;
+  final filePath = 'avatars/avatar_$userId.$ext';
 
-    await _client.storage.from('profile-photos').upload(
-          filePath,
-          imageFile,
-          fileOptions: const FileOptions(upsert: true),
-        );
+  print('auth user: ${_client.auth.currentUser?.id}');
+  print('auth email: ${_client.auth.currentUser?.email}');
+  print('session exists: ${_client.auth.currentSession != null}');
+  print('upload path: $filePath');
 
-    final publicUrl =
-        _client.storage.from('profile-photos').getPublicUrl(filePath);
+  await _client.storage.from('profile-photos').upload(
+        filePath,
+        imageFile,
+        fileOptions: const FileOptions(upsert: true),
+      );
 
-    await _client.from('users').update({
-      'photo': {
-        'url': publicUrl,
-        'updated_at': DateTime.now().toIso8601String(),
-      },
-    }).eq('user_id', userId);
+  final publicUrl =
+      _client.storage.from('profile-photos').getPublicUrl(filePath);
 
-    return publicUrl;
-  }
+  await _client.from('users').update({
+    'photo': {
+      'url': publicUrl,
+      'updated_at': DateTime.now().toIso8601String(),
+    },
+  }).eq('user_id', userId);
 
+  return publicUrl;
+}
   /// for password resets
   Future<void> sendPasswordResetEmail(String email) async {
   await _client.auth.resetPasswordForEmail(
