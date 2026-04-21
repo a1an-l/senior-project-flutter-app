@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/supabase_service.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
+import 'login_page.dart';
 
 
 
@@ -153,7 +154,10 @@ class _SignupPageState extends State<SignupPage> {
                           style: TextStyle(fontSize: 12, color: Color(0xFF8A8A8A)),
                         ),
                         TextButton(
-                          onPressed: () => Navigator.pop(context),
+                          onPressed: () => Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(builder: (_) => const LoginPage()),
+                          ),
                           style: TextButton.styleFrom(
                             padding: EdgeInsets.zero,
                             minimumSize: const Size(0, 0),

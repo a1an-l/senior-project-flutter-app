@@ -196,10 +196,10 @@ class _AppDrawerState extends State<AppDrawer> {
                   ),
                   _DrawerItem(
                     icon: Icons.traffic_outlined,
-                    label: 'Traffic Detection',
+                    label: 'Radius Traffic Detection',
                     subtitle: 'Monitor traffic around you',
                     onTap: () {
-                      Navigator.pop(context);
+                      
                       Navigator.push(
                         context,
                         MaterialPageRoute(

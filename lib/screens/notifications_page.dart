@@ -37,6 +37,36 @@ class _NotificationsPageState extends State<NotificationsPage> {
       return;
     }
 
+    // Clear local notifications to prevent duplicates on sync
+    await NotificationsStore.clearAll();
+
+    // Fetch alerts from Supabase to sync across devices
+    final supabaseAlerts = await SupabaseNotificationsService().getUserAlerts();
+
+    // Restore Supabase alerts to local storage
+    for (final alert in supabaseAlerts) {
+      final alertMsg = alert['alert_msg'].toString();
+      // Parse "title - subtitle: detail" format
+      final parts = alertMsg.split(' - ');
+      final title = parts.isNotEmpty ? parts[0] : 'Alert';
+
+      final rest = parts.length > 1 ? parts.sublist(1).join(' - ') : '';
+      final detailParts = rest.split(': ');
+      final subtitle = detailParts.isNotEmpty ? detailParts[0] : '';
+      final detail = detailParts.length > 1 ? detailParts.sublist(1).join(': ') : '';
+
+      final notification = HiWayNotification(
+        id: alert['id'].toString(),
+        title: title,
+        subtitle: subtitle,
+        detail: detail,
+        createdAtMs: DateTime.parse(alert['timestamp'].toString()).millisecondsSinceEpoch,
+        read: true,
+        urgent: false,
+      );
+      await NotificationsStore.add(notification);
+    }
+
     final list = await NotificationsStore.list();
     await NotificationsStore.markAllRead();
     if (!mounted) {

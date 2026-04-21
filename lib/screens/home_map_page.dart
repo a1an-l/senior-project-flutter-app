@@ -799,37 +799,6 @@ class _HomeMapPageState extends State<HomeMapPage> {
         ),
         title: const Text('HiWay', style: TextStyle(fontWeight: FontWeight.w700)),
         centerTitle: true,
-        actions: [
-          IconButton(
-            onPressed: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const NotificationsPage()),
-              );
-              await _refreshUnread();
-            },
-            icon: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Icon(Icons.notifications_none),
-
-                const Icon(Icons.notifications_none),
-                if (hasUnreadNotifications)
-                  const Positioned(
-                    right: -1,
-                    top: -1,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: Color(0xFFE53935),
-                        shape: BoxShape.circle,
-                      ),
-                      child: SizedBox(width: 8, height: 8),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
       ),
       body: Stack(
         children: [
@@ -1091,7 +1060,18 @@ class _HomeMapPageState extends State<HomeMapPage> {
         height: 70, padding: const EdgeInsets.symmetric(horizontal: 18),
         child: Row(
           children: [
-            _BottomItem(icon: Icons.map_outlined, label: 'Map', selected: bottomIndex == 0, onPressed: () => setState(() => bottomIndex = 0)),
+            _BottomItem(
+              icon: hasUnreadNotifications ? Icons.notifications : Icons.notifications_none, 
+              label: 'Alerts', 
+              selected: false, 
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const NotificationsPage()),
+                );
+                await _refreshUnread();
+              },
+                ),
             const Spacer(),
             Container(
               width: 46,

@@ -103,10 +103,10 @@ class _TrafficSettingsPageState extends State<TrafficSettingsPage> {
                     children: [
                       Align(
                         alignment: Alignment.centerLeft,
-                        child: GestureDetector(
-                          onTap: () => Navigator.maybePop(context),
-                          child: const Icon(
-                            Icons.chevron_left,
+                        child: IconButton(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(
+                            Icons.arrow_back,
                             color: Colors.white,
                             size: 28,
                           ),
