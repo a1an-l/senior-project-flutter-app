@@ -676,8 +676,8 @@ class _HomeMapPageState extends State<HomeMapPage> {
           urgent: true,
         );
         await NotificationsStore.add(notification);
-        
-        // Also save to Supabase
+
+        // Also save to Supabase (Teammate's update)
         await SupabaseNotificationsService().saveNotification(
           title: notification.title,
           subtitle: notification.subtitle,
@@ -802,28 +802,66 @@ class _HomeMapPageState extends State<HomeMapPage> {
       ),
       body: Stack(
         children: [
-          GoogleMap(
-            initialCameraPosition: initialCameraPosition,
-            myLocationEnabled: myLocationEnabled,
-            myLocationButtonEnabled: true, // Native button re-enabled for demo
-            zoomControlsEnabled: false,
-            markers: markers,
-            polylines: polylines,
-
-            // --- NEW: Use the built-in callback, but check our flag ---
-            onCameraMoveStarted: () {
-              // Only trigger if we are navigating AND the code isn't moving the camera
-              if (navigationActive && !_isProgrammaticCameraMove) {
-                setState(() => followUser = false);
-              }
+          // --- 1. BULLETPROOF CAMERA LOCK ---
+          Listener(
+            onPointerDown: (_) {
+              // Drop the lock whenever the user physically touches the screen
+              setState(() => followUser = false);
             },
-
-            onTap: (_) => FocusScope.of(context).unfocus(),
-            onMapCreated: (value) {
-              controller = value;
-              if (myLocationEnabled) _initLocation();
-            },
+            child: GoogleMap(
+              initialCameraPosition: initialCameraPosition,
+              myLocationEnabled: myLocationEnabled,
+              myLocationButtonEnabled: false, // Turn off default top-right button
+              zoomControlsEnabled: false,
+              markers: markers,
+              polylines: polylines,
+              onTap: (_) => FocusScope.of(context).unfocus(),
+              onMapCreated: (value) {
+                controller = value;
+                if (myLocationEnabled) _initLocation();
+              },
+            ),
           ),
+
+          // --- 2. CUSTOM RE-CENTER BUTTON (GLOBAL) ---
+          if (!followUser)
+            Positioned(
+              top: 12, // Tucked cleanly in the top right next to the "New" button
+              right: 16,
+              child: FloatingActionButton(
+                heroTag: "recenter_btn",
+                backgroundColor: Colors.white,
+                mini: true,
+                onPressed: () {
+                  setState(() => followUser = true);
+
+                  if (currentPosition != null && controller != null) {
+                    if (navigationActive) {
+                      // Snap back into 3D navigation mode
+                      controller!.animateCamera(CameraUpdate.newCameraPosition(
+                        CameraPosition(
+                          target: LatLng(currentPosition!.latitude, currentPosition!.longitude),
+                          zoom: 18.5,
+                          tilt: 55.0,
+                          bearing: currentPosition!.heading,
+                        ),
+                      ));
+                    } else {
+                      // Snap back to standard 2D top-down mode
+                      controller!.animateCamera(CameraUpdate.newCameraPosition(
+                        CameraPosition(
+                          target: LatLng(currentPosition!.latitude, currentPosition!.longitude),
+                          zoom: 15.0,
+                          tilt: 0.0,
+                          bearing: 0.0,
+                        ),
+                      ));
+                    }
+                  }
+                },
+                child: const Icon(Icons.my_location, color: Color(0xFF2F5CE5)),
+              ),
+            ),
 
           if (searchExpanded)
             Positioned.fill(
@@ -835,6 +873,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
                 },
               ),
             ),
+
           SafeArea(
             child: Align(
               alignment: Alignment.topCenter,
@@ -862,118 +901,114 @@ class _HomeMapPageState extends State<HomeMapPage> {
               ),
             ),
           ),
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOut,
+
+          // --- 3. PERMANENT TOP SEARCH BAR ---
+          Positioned(
             left: 16, right: 16,
-            top: searchExpanded ? 62 : null,
-            bottom: searchExpanded ? null : 10,
-            child: SafeArea(
-              top: searchExpanded, bottom: !searchExpanded,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
+            top: 64, // Sits perfectly below the top chips, dropdown extends downward
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: Colors.white, borderRadius: BorderRadius.circular(22), border: Border.all(color: const Color(0xFFE5E5E5)),
+                    boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 10, offset: Offset(0, 6))],
+                  ),
+                  child: Row(
+                    children: [
+                      const SizedBox(width: 10),
+                      const Icon(Icons.search, size: 18, color: Color(0xFF8A8A8A)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: searchController,
+                          focusNode: searchFocusNode,
+                          readOnly: !searchExpanded,
+                          textInputAction: TextInputAction.search,
+                          onSubmitted: (value) async {
+                            FocusScope.of(context).unfocus();
+                            print("🛑 DEBUG: Keyboard 'Enter' pressed with value: '$value'");
+                            if (value.trim().isEmpty) return;
+                            if (suggestions.isNotEmpty) {
+                              _selectSuggestion(suggestions.first);
+                            } else {
+                              await _selectRecentSearch(value);
+                            }
+                          },
+                          onTap: () {
+                            if (!searchExpanded) {
+                              setState(() => searchExpanded = true);
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (mounted) FocusScope.of(context).requestFocus(searchFocusNode);
+                              });
+                            }
+                          },
+                          decoration: const InputDecoration(hintText: 'Search', border: InputBorder.none, isDense: true),
+                        ),
+                      ),
+                      if (searching)
+                        const SizedBox(width: 28, height: 28, child: Padding(padding: EdgeInsets.all(6), child: CircularProgressIndicator(strokeWidth: 2)))
+                      else if (searchExpanded && searchController.text.isNotEmpty)
+                        IconButton(
+                          onPressed: () {
+                            setState(() {
+                              searchController.clear();
+                              suggestions = [];
+                              selectedPlace = null;
+                              selectedDirections = null;
+                              navigationActive = false;
+                              polylines.removeWhere((p) => p.polylineId != const PolylineId('tracked_route'));
+                              markers = {};
+                            });
+                          },
+                          icon: const Icon(Icons.close, size: 18),
+                        ),
+                    ],
+                  ),
+                ),
+                if (searchExpanded && (suggestions.isNotEmpty || (searchController.text.isEmpty && recentSearches.isNotEmpty)))
                   Container(
-                    height: 42,
+                    margin: const EdgeInsets.only(top: 8),
                     decoration: BoxDecoration(
-                      color: Colors.white, borderRadius: BorderRadius.circular(22), border: Border.all(color: const Color(0xFFE5E5E5)),
+                      color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE5E5E5)),
                       boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 10, offset: Offset(0, 6))],
                     ),
-                    child: Row(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        const SizedBox(width: 10),
-                        const Icon(Icons.search, size: 18, color: Color(0xFF8A8A8A)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextField(
-                            controller: searchController,
-                            focusNode: searchFocusNode,
-                            readOnly: !searchExpanded,
-                            textInputAction: TextInputAction.search,
-                            onSubmitted: (value) async {
-                              FocusScope.of(context).unfocus();
-                              print("🛑 DEBUG: Keyboard 'Enter' pressed with value: '$value'");
-                              if (value.trim().isEmpty) return;
-                              if (suggestions.isNotEmpty) {
-                                _selectSuggestion(suggestions.first);
-                              } else {
-                                await _selectRecentSearch(value);
-                              }
-                            },
-                            onTap: () {
-                              if (!searchExpanded) {
-                                setState(() => searchExpanded = true);
-                                WidgetsBinding.instance.addPostFrameCallback((_) {
-                                  if (mounted) FocusScope.of(context).requestFocus(searchFocusNode);
-                                });
-                              }
-                            },
-                            decoration: const InputDecoration(hintText: 'Search', border: InputBorder.none, isDense: true),
+                        if (searchController.text.isEmpty && recentSearches.isNotEmpty)
+                          const Padding(
+                            padding: EdgeInsets.fromLTRB(12, 10, 12, 6),
+                            child: Row(
+                              children: [
+                                Text(
+                                  'Recent',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        if (searching)
-                          const SizedBox(width: 28, height: 28, child: Padding(padding: EdgeInsets.all(6), child: CircularProgressIndicator(strokeWidth: 2)))
-                        else if (searchExpanded && searchController.text.isNotEmpty)
-                          IconButton(
-                            onPressed: () {
-                              setState(() {
-                                searchController.clear();
-                                suggestions = [];
-                                selectedPlace = null;
-                                selectedDirections = null;
-                                navigationActive = false;
-                                polylines.removeWhere((p) => p.polylineId != const PolylineId('tracked_route'));
-                                markers = {};
-                              });
+                        if (searchController.text.isEmpty && recentSearches.isNotEmpty)
+                          ListView.separated(
+                            shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), itemCount: recentSearches.length, separatorBuilder: (context, index) => const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final value = recentSearches[index];
+                              return ListTile(dense: true, leading: const Icon(Icons.history, size: 18, color: Color(0xFF8A8A8A)), title: Text(value, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)), onTap: () => _selectRecentSearch(value));
                             },
-                            icon: const Icon(Icons.close, size: 18),
+                          )
+                        else
+                          ListView.separated(
+                            shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), itemCount: suggestions.length > 6 ? 6 : suggestions.length, separatorBuilder: (context, index) => const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final s = suggestions[index];
+                              return ListTile(dense: true, title: Text(s.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)), onTap: () => _selectSuggestion(s));
+                            },
                           ),
                       ],
                     ),
                   ),
-                  if (searchExpanded && (suggestions.isNotEmpty || (searchController.text.isEmpty && recentSearches.isNotEmpty)))
-                    Container(
-                      margin: const EdgeInsets.only(top: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE5E5E5)),
-                        boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 10, offset: Offset(0, 6))],
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (searchController.text.isEmpty && recentSearches.isNotEmpty)
-                            const Padding(
-                              padding: EdgeInsets.fromLTRB(12, 10, 12, 6),
-                              child: Row(
-                                children: [
-                                  Text(
-                                    'Recent',
-                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          if (searchController.text.isEmpty && recentSearches.isNotEmpty)
-                            ListView.separated(
-                              shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), itemCount: recentSearches.length, separatorBuilder: (context, index) => const Divider(height: 1),
-                              itemBuilder: (context, index) {
-                                final value = recentSearches[index];
-                                return ListTile(dense: true, leading: const Icon(Icons.history, size: 18, color: Color(0xFF8A8A8A)), title: Text(value, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)), onTap: () => _selectRecentSearch(value));
-                              },
-                            )
-                          else
-                            ListView.separated(
-                              shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), itemCount: suggestions.length > 6 ? 6 : suggestions.length, separatorBuilder: (context, index) => const Divider(height: 1),
-                              itemBuilder: (context, index) {
-                                final s = suggestions[index];
-                                return ListTile(dense: true, title: Text(s.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)), onTap: () => _selectSuggestion(s));
-                              },
-                            ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
+              ],
             ),
           ),
 
@@ -1061,9 +1096,9 @@ class _HomeMapPageState extends State<HomeMapPage> {
         child: Row(
           children: [
             _BottomItem(
-              icon: hasUnreadNotifications ? Icons.notifications : Icons.notifications_none, 
-              label: 'Alerts', 
-              selected: false, 
+              icon: hasUnreadNotifications ? Icons.notifications : Icons.notifications_none,
+              label: 'Alerts',
+              selected: false,
               onPressed: () async {
                 await Navigator.push(
                   context,
@@ -1071,7 +1106,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
                 );
                 await _refreshUnread();
               },
-                ),
+            ),
             const Spacer(),
             Container(
               width: 46,

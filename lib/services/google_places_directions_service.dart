@@ -33,10 +33,10 @@ class GooglePlacesDirectionsService {
     return predictions
         .map(
           (p) => PlaceSuggestion(
-            placeId: p['place_id'] as String,
-            description: (p['description'] as String?) ?? '',
-          ),
-        )
+        placeId: p['place_id'] as String,
+        description: (p['description'] as String?) ?? '',
+      ),
+    )
         .toList(growable: false);
   }
 
@@ -153,9 +153,19 @@ class GooglePlacesDirectionsService {
     }
 
     final steps = <DirectionsStep>[];
+    final highResPolylinePoints = <List<double>>[]; // --- NEW: Array to hold high-res points ---
+
     if (firstLeg != null) {
       final rawSteps = (firstLeg['steps'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
       for (final s in rawSteps) {
+
+        // --- NEW: Stitch together the high-res road data from each step ---
+        final stepPolyline = s['polyline'] as Map<String, dynamic>?;
+        if (stepPolyline != null && stepPolyline['points'] != null) {
+          highResPolylinePoints.addAll(decodePolyline(stepPolyline['points'] as String));
+        }
+        // ------------------------------------------------------------------
+
         final instructionRaw = (s['html_instructions'] as String?) ?? '';
         final distance = s['distance'] as Map<String, dynamic>?;
         final duration = s['duration'] as Map<String, dynamic>?;
@@ -180,7 +190,8 @@ class GooglePlacesDirectionsService {
     }
 
     return DirectionsResult(
-      polylinePoints: decodePolyline(points),
+      // --- NEW: Use high-res points if available, otherwise fallback to the simplified overview ---
+      polylinePoints: highResPolylinePoints.isNotEmpty ? highResPolylinePoints : decodePolyline(points),
       distanceText: distanceText,
       durationText: durationText,
       durationInTrafficText: durationInTrafficText,
