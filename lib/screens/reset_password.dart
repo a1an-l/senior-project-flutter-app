@@ -65,7 +65,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
         throw Exception('No authenticated user email found.');
       }
 
-      // Hash password the same way your login/signup flow does
+      // Hash password
       final hashedPassword =
           sha256.convert(utf8.encode(newPassword)).toString();
 
@@ -74,7 +74,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
         UserAttributes(password: hashedPassword),
       );
 
-      // Update your custom users table
+      // Update custom users table
       await client
           .from('users')
           .update({'password': hashedPassword}).eq('email', userEmail);

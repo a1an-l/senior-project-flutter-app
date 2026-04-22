@@ -122,7 +122,7 @@ class LocationSetupScreen extends StatelessWidget {
                       );
                     },
                     child: const Text(
-                      'Complete Set Up',
+                      'Complete',
                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                     ),
                   ),
@@ -190,7 +190,7 @@ class _LocationItem extends StatelessWidget {
             context,
             MaterialPageRoute(
               builder: (_) => LocationInputPage(
-                title: label,
+                title: label ,
                 placeholder: 'Enter $label address',
               ),
             ),

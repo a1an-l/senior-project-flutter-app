@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/api_keys.dart';
 import '../services/google_places_directions_service.dart';
@@ -92,6 +94,44 @@ class _LocationInputPageState extends State<LocationInputPage> {
     });
   }
 
+  //helper function to save address to supabase
+  Future<void> _saveAddressToSupabase({
+  required String label,
+  required String address,
+}) async {
+  final prefs = await SharedPreferences.getInstance();
+  final int? userId = prefs.getInt('user_id');
+
+  if (userId == null) {
+    throw Exception('No logged in user found.');
+  }
+
+  final client = Supabase.instance.client;
+
+  final existing = await client
+      .from('addressDB')
+      .select('address_id')
+      .eq('user_id', userId)
+      .eq('label', label)
+      .maybeSingle();
+
+  if (existing != null) {
+    await client
+        .from('addressDB')
+        .update({
+          'address': address,
+        })
+        .eq('address_id', existing['address_id']);
+  } else {
+    await client.from('addressDB').insert({
+      'user_id': userId,
+      'label': label,
+      'address': address,
+      'created_at': DateTime.now().toIso8601String(),
+    });
+  }
+}
+
   Future<void> _select(PlaceSuggestion suggestion) async {
     final s = service;
     if (s == null) {
@@ -124,6 +164,12 @@ class _LocationInputPageState extends State<LocationInputPage> {
     );
 
     await SavedPlacesStore.set(saved);
+
+    //save address to supabase  
+    await _saveAddressToSupabase(
+      label: widget.title,
+      address: saved.address,
+    );
 
     Future.delayed(const Duration(seconds: 10), () async {
       final notification = HiWayNotification(

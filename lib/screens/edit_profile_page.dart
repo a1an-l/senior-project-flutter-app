@@ -2,6 +2,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '/services/profile_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'landing_page.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 
 class EditProfilePage extends StatefulWidget {
   final int userId;
@@ -190,6 +194,59 @@ Future<void> _onSubmit() async {
   }
 }
 
+  Future<void> _handleSignOut() async {
+  setState(() => _isLoading = true);
+
+  try {
+    await Supabase.instance.client.auth.signOut();
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('user_id');
+
+    if (!mounted) return;
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LandingPage()),
+      (route) => false,
+    );
+  } catch (e) {
+    _showSnack('Failed to sign out: $e');
+  } finally {
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+  }
+}
+
+Future<void> _confirmSignOut() async {
+  final shouldSignOut = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Sign Out'),
+      content: const Text('Are you sure you want to sign out?'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text(
+            'Sign Out',
+            style: TextStyle(color: Colors.red),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  if (shouldSignOut == true) {
+    await _handleSignOut();
+  }
+}
+
+
   void _showSnack(String message, {bool isError = true}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -309,13 +366,16 @@ Future<void> _onSubmit() async {
                       ),
                       const SizedBox(height: 24),
 
-                      //Reset password button 
                       OutlinedButton.icon(
                         onPressed: _isLoading ? null : _sendPasswordResetEmail,
-                        icon: const Icon(Icons.lock_outline,
-                            color: Color(0xFF1A6FD4)),
-                        label: const Text('Reset Password',
-                            style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1A6FD4))),
+                        icon: const Icon(Icons.lock_outline, color: Color(0xFF1A6FD4)),
+                        label: const Text(
+                          'Reset Password',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1A6FD4),
+                          ),
+                        ),
                         style: OutlinedButton.styleFrom(
                           side: const BorderSide(color: Color(0xFF1A6FD4)),
                           padding: const EdgeInsets.symmetric(vertical: 14),
@@ -326,10 +386,8 @@ Future<void> _onSubmit() async {
                       ),
                       const SizedBox(height: 16),
 
-                      // ── Submit ──
                       ElevatedButton(
                         onPressed: _isLoading ? null : _onSubmit,
-          
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF1A6FD4),
                           foregroundColor: Colors.white,
@@ -338,8 +396,26 @@ Future<void> _onSubmit() async {
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        child: const Text('SUBMIT CHANGES',
-                            style: TextStyle(fontWeight: FontWeight.bold)),
+                        child: const Text(
+                          'SUBMIT CHANGES',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+
+                      const SizedBox(height: 40),
+
+                      Center(
+                        child: TextButton.icon(
+                          onPressed: _isLoading ? null : _confirmSignOut,
+                          icon: const Icon(Icons.logout, color: Colors.red),
+                          label: const Text(
+                            'Sign Out',
+                            style: TextStyle(
+                              color: Colors.red,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),

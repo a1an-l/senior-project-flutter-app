@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'traffic_settings_page.dart';
+import 'my_addresses.dart';
 import 'edit_profile_page.dart'; 
 
 class AppDrawer extends StatefulWidget {
@@ -186,7 +187,15 @@ class _AppDrawerState extends State<AppDrawer> {
                     icon: Icons.route_outlined,
                     label: 'My Routes',
                     subtitle: 'View your saved routes',
-                    onTap: () {},
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const MyAddresses(),
+                        ),
+                      );
+                    },
                   ),
                   _DrawerItem(
                     icon: Icons.settings_outlined,
@@ -211,27 +220,7 @@ class _AppDrawerState extends State<AppDrawer> {
                 ],
               ),
             ),
-          ),
-
-          // Sign Out
-          Container(
-            color: const Color(0xFFF2F2F7),
-            width: double.infinity,
-            padding: const EdgeInsets.only(bottom: 32, top: 8),
-            child: TextButton(
-              onPressed: () {},
-              child: const Text(
-                'Sign Out',
-                style: TextStyle(
-                  color: Colors.red,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  decoration: TextDecoration.underline,
-                  decorationColor: Colors.red,
-                ),
-              ),
-            ),
-          ),
+          ),  
         ],
       ),
     );
