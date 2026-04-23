@@ -26,6 +26,8 @@ import '../services/supabase_notifications_service.dart';
 import 'notifications_page.dart';
 import 'location_input_page.dart';
 import 'history_page.dart';
+import 'traffic_settings_page.dart';
+import '../services/background_traffic_service.dart';
 
 class HomeMapPage extends StatefulWidget {
   const HomeMapPage({super.key});
@@ -36,6 +38,7 @@ class HomeMapPage extends StatefulWidget {
 
 class _HomeMapPageState extends State<HomeMapPage> {
   final GlobalKey<ScaffoldState> scaffoldKey = GlobalKey<ScaffoldState>();
+
   int bottomIndex = 0;
   GoogleMapController? controller;
   bool myLocationEnabled = false;
@@ -76,11 +79,51 @@ class _HomeMapPageState extends State<HomeMapPage> {
   bool _isProgrammaticCameraMove = false;
   final double offRouteThresholdMeters = 75.0; // Reroute if >75m off path
 
+  
+  bool _isEnabled = false;
+  
+
   static const CameraPosition initialCameraPosition = CameraPosition(
     target: LatLng(26.3017, -98.1633),
     zoom: 12,
   );
 
+  Future<void> _loadTrafficToggle() async {
+  final settings = await BackgroundTrafficService.getTrafficSettings();
+  if (!mounted) return;
+
+  setState(() {
+    _isEnabled = settings['enabled'] ?? false;
+  });
+}
+
+Future<void> _toggleTrafficMonitoring(bool value) async {
+  setState(() => _isEnabled = value);
+
+  final settings = await BackgroundTrafficService.getTrafficSettings();
+  final intervalMinutes = settings['intervalMinutes'] ?? 15;
+  final radiusMiles = (settings['radiusMiles'] ?? 5).toDouble();
+  final notifyOnlySerious = settings['notifyOnlySerious'] ?? true;
+
+  if (value) {
+    await BackgroundTrafficService.startTrafficMonitoring(
+      intervalMinutes: intervalMinutes,
+      radiusMiles: radiusMiles,
+      notifyOnlySerious: notifyOnlySerious,
+    );
+  } else {
+    await BackgroundTrafficService.stopTrafficMonitoring();
+  }
+
+  if (!mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(
+        value ? 'Traffic monitoring started' : 'Traffic monitoring stopped',
+      ),
+    ),
+  );
+}
   @override
   void initState() {
     super.initState();
@@ -89,6 +132,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
     _loadApiKey();
     _loadRecentSearches();
     _refreshUnread();
+    _loadTrafficToggle();
     searchController.addListener(_onSearchChanged);
     searchFocusNode.addListener(() {
       if (mounted) {
@@ -788,7 +832,17 @@ class _HomeMapPageState extends State<HomeMapPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       key: scaffoldKey,
-      drawer: const AppDrawer(),
+      drawer: AppDrawer(
+        onOpenTrafficSettings: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const TrafficSettingsPage(),
+            ),
+          );
+          await _loadTrafficToggle();
+        },
+      ),
 
       appBar: AppBar(
         backgroundColor: const Color(0xFF2F5CE5),
@@ -799,6 +853,12 @@ class _HomeMapPageState extends State<HomeMapPage> {
         ),
         title: const Text('HiWay', style: TextStyle(fontWeight: FontWeight.w700)),
         centerTitle: true,
+        actions: [
+          Switch(
+            value: _isEnabled,
+            onChanged: _toggleTrafficMonitoring,
+          )
+        ],
       ),
       body: Stack(
         children: [

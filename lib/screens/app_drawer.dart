@@ -6,7 +6,9 @@ import 'my_addresses.dart';
 import 'edit_profile_page.dart'; 
 
 class AppDrawer extends StatefulWidget {
-  const AppDrawer({super.key});
+  const AppDrawer({super.key, required this.onOpenTrafficSettings});
+
+  final VoidCallback onOpenTrafficSettings;
 
   @override
   State<AppDrawer> createState() => _AppDrawerState();
@@ -209,12 +211,7 @@ class _AppDrawerState extends State<AppDrawer> {
                     subtitle: 'Monitor traffic around you',
                     onTap: () {
                       
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const TrafficSettingsPage(),
-                        ),
-                      );
+                      widget.onOpenTrafficSettings();
                     },
                   ),
                 ],

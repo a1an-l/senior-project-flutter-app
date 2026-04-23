@@ -190,8 +190,8 @@ class _LocationItem extends StatelessWidget {
             context,
             MaterialPageRoute(
               builder: (_) => LocationInputPage(
-                title: label ,
-                placeholder: 'Enter $label address',
+                title: label,
+                placeholder: 'Enter ${label.toLowerCase()} address',
               ),
             ),
           );
