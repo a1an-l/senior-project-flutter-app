@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'traffic_settings_page.dart';
 import 'my_addresses.dart';
 import 'edit_profile_page.dart'; 
+import 'settings_page.dart';
 
 class AppDrawer extends StatefulWidget {
   const AppDrawer({super.key, required this.onOpenTrafficSettings});
@@ -187,8 +188,8 @@ class _AppDrawerState extends State<AppDrawer> {
                 ),
                   _DrawerItem(
                     icon: Icons.route_outlined,
-                    label: 'My Routes',
-                    subtitle: 'View your saved routes',
+                    label: 'My Addresses',
+                    subtitle: 'View your saved addresses',
                     onTap: () {
                       Navigator.pop(context);
                       Navigator.push(
@@ -203,7 +204,15 @@ class _AppDrawerState extends State<AppDrawer> {
                     icon: Icons.settings_outlined,
                     label: 'Settings',
                     subtitle: 'View settings',
-                    onTap: () {},
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const SettingsPage(),
+                        )
+                      );
+                    },
                   ),
                   _DrawerItem(
                     icon: Icons.traffic_outlined,
