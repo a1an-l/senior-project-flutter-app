@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/api_keys.dart';
 import '../services/google_places_directions_service.dart';
+import '../services/route_traffic_service.dart';
 
 class AddAddressPage extends StatefulWidget {
   const AddAddressPage({super.key});
@@ -214,6 +215,10 @@ class _AddAddressPageState extends State<AddAddressPage> {
           'created_at': DateTime.now().toIso8601String(),
         });
       }
+
+      // Best-effort: automatically seed a baseline for this route in background.
+      // We don't await this to avoid blocking the UI; failures are non-fatal.
+      RouteTrafficService.seedBaseline(label).then((_) {}).catchError((_) {});
 
       if (!mounted) return;
       Navigator.pop(context, true);
