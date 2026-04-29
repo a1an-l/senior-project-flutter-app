@@ -13,16 +13,13 @@ import '../services/route_service.dart';
 import '../services/history_service.dart';
 
 // --- Manual Track Imports ---
-import '../services/route_service.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
-
-// --- Main Branch Imports ---
 import '../services/last_known_location_store.dart';
 import '../services/notification_service.dart';
-import '../services/background_tasks.dart';
-import 'package:workmanager/workmanager.dart';
+// background tasks and workmanager are not used in this screen; imports removed
 import '../services/notifications_store.dart';
 import '../services/supabase_notifications_service.dart';
+import '../services/route_monitor_store.dart';
+import '../services/route_traffic_service.dart';
 import 'notifications_page.dart';
 import 'location_input_page.dart';
 import 'history_page.dart';
@@ -76,7 +73,6 @@ class _HomeMapPageState extends State<HomeMapPage> {
   bool isRerouting = false;
   int offRouteCount = 0;
   final double arrivalThresholdMeters = 50.0;
-  bool _isProgrammaticCameraMove = false;
   final double offRouteThresholdMeters = 75.0; // Reroute if >75m off path
 
   
@@ -392,7 +388,7 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
       }
 
       if (followUser && controller != null) {
-        _isProgrammaticCameraMove = true; // Tell the map WE are moving the camera
+        // Programmatic camera move: animating to user's location
         // --- NEW: Dynamic Navigation Camera ---
         if (navigationActive) {
           await controller!.animateCamera(CameraUpdate.newCameraPosition(
@@ -408,9 +404,7 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
           await controller!.animateCamera(CameraUpdate.newLatLng(LatLng(p.latitude, p.longitude)));
         }
         // Allow gestures to register again after the animation completes
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted) _isProgrammaticCameraMove = false;
-        });
+        // Allow gestures to register again after the animation completes
       }
     });
 
@@ -630,12 +624,7 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
       await LastKnownLocationStore.save(lat: origin.latitude, lng: origin.longitude);
     }
 
-    await Workmanager().registerPeriodicTask(
-      'traffic_check',
-      trafficCheckTaskName,
-      frequency: const Duration(minutes: 15),
-      existingWorkPolicy: ExistingWorkPolicy.replace,
-    );
+    await RouteTrafficService.startMonitoring(intervalMinutes: 15);
 
     inAppTrafficTimer?.cancel();
     inAppTrafficTimer = Timer.periodic(const Duration(minutes: 2), (_) => _checkTrafficNow());
@@ -652,6 +641,10 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
     const nearMeters = 1609.0;
     final labels = await SavedPlacesStore.labels();
     for (final label in labels) {
+      final monitor = await RouteMonitorStore.load(label) ?? RouteMonitorConfig.defaultConfig();
+      if (!monitor.enabled) continue;
+      if (!monitor.isActiveAt(DateTime.now())) continue;
+
       final saved = await SavedPlacesStore.get(label);
       final avgSeconds = saved?.avgSeconds;
       if (saved == null || avgSeconds == null) {
@@ -783,7 +776,7 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
       followUser = true;
     });
     // --- NEW: Lock the map from registering a user swipe during the swoop ---
-    _isProgrammaticCameraMove = true;
+    // Programmatic camera move: animating to selected position
     // --- NEW: Swoop camera into Navigation Mode immediately ---
     if (currentPosition != null && controller != null) {
       await controller!.animateCamera(CameraUpdate.newCameraPosition(
@@ -798,7 +791,9 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
 
     // Release the lock after the animation finishes (1 second is safe)
     Future.delayed(const Duration(milliseconds: 1000), () {
-      if (mounted) _isProgrammaticCameraMove = false;
+      if (mounted) {
+        // animation complete
+      }
     });
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -1119,7 +1114,7 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
                           const SizedBox.shrink(),
                         const SizedBox(width: 8),
                         IconButton(
-                          onPressed: () {
+                            onPressed: () async {
                             setState(() {
                               searchController.clear();
                               suggestions = [];
@@ -1130,7 +1125,7 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
                               markers = {};
                             });
                             _stopInAppNavigation();
-                            Workmanager().cancelByUniqueName('traffic_check');
+                            await RouteTrafficService.stopMonitoring();
                             inAppTrafficTimer?.cancel();
                           },
                           icon: const Icon(Icons.close),

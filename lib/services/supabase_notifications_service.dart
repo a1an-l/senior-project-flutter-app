@@ -62,13 +62,13 @@ class SupabaseNotificationsService {
         return [];
       }
 
-      final response = await _supabase
+        final response = await _supabase
           .from('alerts')
           .select()
           .eq('user_id', userId)
           .order('timestamp', ascending: false);
 
-      return response as List<Map<String, dynamic>>;
+        return List<Map<String, dynamic>>.from(response as List);
     } catch (e) {
       print('SupabaseNotificationsService: Error fetching alerts: $e');
       return [];

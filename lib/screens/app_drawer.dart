@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'traffic_settings_page.dart';
 import 'my_addresses.dart';
 import 'edit_profile_page.dart'; 
 import 'settings_page.dart';
@@ -191,7 +190,7 @@ class _AppDrawerState extends State<AppDrawer> {
                     label: 'My Addresses',
                     subtitle: 'View your saved addresses',
                     onTap: () {
-                      Navigator.pop(context);
+                     
                       Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -205,7 +204,7 @@ class _AppDrawerState extends State<AppDrawer> {
                     label: 'Settings',
                     subtitle: 'View settings',
                     onTap: () {
-                      Navigator.pop(context);
+                      
                       Navigator.push(
                         context,
                         MaterialPageRoute(

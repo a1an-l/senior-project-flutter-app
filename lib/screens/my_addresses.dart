@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'add_address_page.dart';
+import '../services/route_monitor_store.dart';
+import '../services/route_traffic_service.dart';
 
 
 class MyAddresses extends StatefulWidget {
@@ -16,6 +18,7 @@ class _MyAddressesPageState extends State<MyAddresses> {
 
   bool _isLoading = true;
   List<Map<String, dynamic>> _addresses = [];
+  Map<String, RouteMonitorConfig> _routeConfigs = {};
 
   @override
   void initState() {
@@ -47,6 +50,34 @@ class _MyAddressesPageState extends State<MyAddresses> {
       setState(() {
         _addresses = List<Map<String, dynamic>>.from(data);
       });
+
+      // Ensure route monitor configs exist for each label, and sync DB times when available
+      final existingConfigs = await RouteMonitorStore.loadAll();
+      var updated = false;
+      for (final row in _addresses) {
+        final label = (row['label'] ?? '').toString();
+        if (label.isEmpty) continue;
+        if (!existingConfigs.containsKey(label)) {
+          final start = _parseTime(row['start_time']);
+          final end = _parseTime(row['end_time']);
+          final cfg = (start != null && end != null)
+              ? RouteMonitorConfig(
+                  enabled: true,
+                  startHour: start.hour,
+                  startMinute: start.minute,
+                  endHour: end.hour,
+                  endMinute: end.minute,
+                  autoResetBaseline: false,
+                  autoResetIntervalMinutes: 24 * 60,
+                  lastResetAtMs: 0,
+                )
+              : RouteMonitorConfig.defaultConfig();
+          existingConfigs[label] = cfg;
+          updated = true;
+        }
+      }
+      if (updated) await RouteMonitorStore.saveAll(existingConfigs);
+      _routeConfigs = existingConfigs;
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -482,14 +513,97 @@ class _MyAddressesPageState extends State<MyAddresses> {
                                 ],
                               ),
                             ),
-                            GestureDetector(
-                              onTapDown: (details) {
-                                _showAddressMenu(row, details.globalPosition);
-                              },
-                              child: const Padding(
-                                padding: EdgeInsets.only(left: 8, top: 4),
-                                child: Icon(Icons.more_horiz),
-                              ),
+                            Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Switch(
+                                  value: _routeConfigs[label]?.enabled ?? false,
+                                  onChanged: (value) async {
+                                    final current = _routeConfigs[label] ?? RouteMonitorConfig.defaultConfig();
+                                    final updated = RouteMonitorConfig(
+                                      enabled: value,
+                                      startHour: current.startHour,
+                                      startMinute: current.startMinute,
+                                      endHour: current.endHour,
+                                      endMinute: current.endMinute,
+                                      autoResetBaseline: current.autoResetBaseline,
+                                      autoResetIntervalMinutes: current.autoResetIntervalMinutes,
+                                      lastResetAtMs: current.lastResetAtMs,
+                                    );
+                                    await RouteMonitorStore.save(label, updated);
+                                    setState(() => _routeConfigs[label] = updated);
+                                    await RouteTrafficService.refreshMonitoring();
+
+                                    if (!mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(value ? 'Alerts enabled for $label' : 'Alerts disabled for $label'),
+                                      ),
+                                    );
+                                  },
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _routeConfigs[label]?.enabled == true ? 'Alerts: On' : 'Alerts: Off',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                                ),
+                              ],
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.play_arrow),
+                                  tooltip: 'Test route alerts',
+                                  onPressed: () async {
+                                    final snack = ScaffoldMessenger.of(context);
+                                    snack.showSnackBar(const SnackBar(content: Text('Testing route...')));
+                                    final result = await RouteTrafficService.testRoute(label);
+                                    final message = result['message']?.toString() ?? 'Test complete';
+                                    if (mounted) {
+                                      snack.hideCurrentSnackBar();
+                                      // If message indicates missing historical average, offer to seed baseline
+                                      if (message.toLowerCase().contains('no historical average')) {
+                                        final confirm = await showDialog<bool>(
+                                          context: context,
+                                          builder: (ctx) => AlertDialog(
+                                            title: const Text('No baseline'),
+                                            content: Text('$message\n\nWould you like to seed a baseline using your current travel time?'),
+                                            actions: [
+                                              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                                              ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Seed baseline')),
+                                            ],
+                                          ),
+                                        );
+                                        if (confirm == true) {
+                                          snack.showSnackBar(const SnackBar(content: Text('Seeding baseline...')));
+                                          final seedRes = await RouteTrafficService.seedBaseline(label);
+                                          final seedMsg = seedRes['message']?.toString() ?? 'Seed complete';
+                                          if (mounted) {
+                                            snack.hideCurrentSnackBar();
+                                            snack.showSnackBar(SnackBar(content: Text(seedMsg)));
+                                            await _loadAddresses();
+                                          }
+                                        }
+                                      } else {
+                                        snack.showSnackBar(SnackBar(content: Text(message)));
+                                      }
+                                    }
+                                  },
+                                ),
+                                // Auto-reset baseline is now automatic every 15 minutes; UI option removed.
+                                
+                                GestureDetector(
+                                  onTapDown: (details) {
+                                    _showAddressMenu(row, details.globalPosition);
+                                  },
+                                  child: const Padding(
+                                    padding: EdgeInsets.only(left: 8, top: 4),
+                                    child: Icon(Icons.more_horiz),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),

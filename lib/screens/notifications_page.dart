@@ -28,9 +28,11 @@ class _NotificationsPageState extends State<NotificationsPage> {
     final int? userId = prefs.getInt('user_id');
 
     if (userId == null) {
-      // User is a guest
+      // User is a guest: show local notifications only (no Supabase sync)
+      final list = await NotificationsStore.list();
       if (!mounted) return;
       setState(() {
+        items = list;
         isGuest = true;
         loading = false;
       });

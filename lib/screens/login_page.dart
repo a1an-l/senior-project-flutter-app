@@ -3,7 +3,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // <-- Added this import
 import 'signup_page.dart';
 import 'home_map_page.dart';
-import 'location_setup_screen.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
 
