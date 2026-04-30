@@ -1360,18 +1360,28 @@ class _HomeMapPageState extends State<HomeMapPage> {
               },
             ),
             const Spacer(),
-            Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                color: isTracking ? Colors.red : const Color(0xFF2F5CE5),
-                shape: BoxShape.circle,
+            ElevatedButton.icon(
+              onPressed: _toggleTracking,
+              icon: Icon(
+                isTracking ? Icons.stop_rounded : Icons.route_rounded,
+                color: Colors.white,
+                size: 20,
               ),
-              child: IconButton(
-                onPressed: _toggleTracking,
-                icon: Icon(
-                  isTracking ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                  color: Colors.white,
+              label: Text(
+                isTracking ? 'Stop Tracking' : 'Track Route',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  letterSpacing: 0.3, // Adds a tiny bit of readability
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isTracking ? Colors.red : const Color(0xFF2F5CE5),
+                foregroundColor: Colors.white,
+                elevation: 3,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24), // Creates the nice pill shape
                 ),
               ),
             ),
