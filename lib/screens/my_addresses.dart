@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'add_address_page.dart';
-import 'address_alarms_page.dart'; // NEW IMPORT
+import 'address_alarms_page.dart';
 import '../services/route_monitor_store.dart';
 import '../services/route_traffic_service.dart';
 
@@ -17,16 +17,16 @@ class _MyAddressesPageState extends State<MyAddresses> {
   final supabase = Supabase.instance.client;
 
   bool _isLoading = true;
-  List<Map<String, dynamic>> _addresses = [];
+  List<Map<String, dynamic>> _savedLocations = [];
   Map<String, RouteMonitorConfig> _routeConfigs = {};
 
   @override
   void initState() {
     super.initState();
-    _loadAddresses();
+    _loadLocations();
   }
 
-  Future<void> _loadAddresses() async {
+  Future<void> _loadLocations() async {
     setState(() => _isLoading = true);
 
     try {
@@ -35,29 +35,59 @@ class _MyAddressesPageState extends State<MyAddresses> {
 
       if (userId == null) {
         setState(() {
-          _addresses = [];
+          _savedLocations = [];
           _isLoading = false;
         });
         return;
       }
 
-      final data = await supabase
-          .from('addressDB')
-          .select()
-          .eq('user_id', userId)
-          .order('created_at', ascending: true);
+      // Fetch Addresses
+      final addressData = await supabase.from('addressDB').select().eq('user_id', userId);
+      // Fetch Tracked Routes
+      final routeData = await supabase.from('routedb').select().eq('user_id', userId);
+
+      List<Map<String, dynamic>> combined = [];
+
+      for (var row in addressData) {
+        combined.add({
+          'id': row['address_id'],
+          'type': 'address',
+          'label': row['label'] ?? 'Unknown',
+          'address': row['address'] ?? '',
+          'created_at': row['created_at'],
+        });
+      }
+
+      for (var row in routeData) {
+        final routeName = row['route_name'];
+        final label = (routeName != null && routeName.toString().trim().isNotEmpty) ? routeName.toString() : 'Personal Route';
+
+        combined.add({
+          'id': row['route_id'],
+          'type': 'route',
+          'label': label,
+          'address': 'Custom Tracked Route',
+          'created_at': row['created_at'],
+        });
+      }
+
+      // Sort both combined lists by date created
+      combined.sort((a, b) {
+        final dateA = DateTime.tryParse(a['created_at'] ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final dateB = DateTime.tryParse(b['created_at'] ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return dateA.compareTo(dateB); // Oldest first
+      });
 
       setState(() {
-        _addresses = List<Map<String, dynamic>>.from(data);
+        _savedLocations = combined;
       });
 
       final existingConfigs = await RouteMonitorStore.loadAll();
       var updated = false;
-      for (final row in _addresses) {
+      for (final row in _savedLocations) {
         final label = (row['label'] ?? '').toString();
         if (label.isEmpty) continue;
         if (!existingConfigs.containsKey(label)) {
-          // Initialize with default config since times are now managed in time table
           existingConfigs[label] = RouteMonitorConfig.defaultConfig();
           updated = true;
         }
@@ -66,61 +96,53 @@ class _MyAddressesPageState extends State<MyAddresses> {
       _routeConfigs = existingConfigs;
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load addresses: $e')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load locations: $e')));
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _deleteAddress(int addressId) async {
+  Future<void> _deleteItem(int id, String type) async {
     try {
-      await supabase
-          .from('addressDB')
-          .delete()
-          .eq('address_id', addressId);
+      if (type == 'address') {
+        await supabase.from('addressDB').delete().eq('address_id', id);
+      } else {
+        await supabase.from('routedb').delete().eq('route_id', id);
+      }
 
       if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Address deleted')),
-      );
-
-      await _loadAddresses();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Item deleted')));
+      await _loadLocations();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete address: $e')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to delete: $e')));
     }
   }
 
-  Future<void> _showEditDialog(Map<String, dynamic> addressRow) async {
-    final labelController =
-    TextEditingController(text: addressRow['label'] ?? '');
-    final addressController =
-    TextEditingController(text: addressRow['address'] ?? '');
+  Future<void> _showEditDialog(Map<String, dynamic> row) async {
+    final isRoute = row['type'] == 'route';
+    final labelController = TextEditingController(text: row['label'] ?? '');
+    final addressController = TextEditingController(text: row['address'] ?? '');
 
     await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Edit Address'),
+        title: Text(isRoute ? 'Edit Route Name' : 'Edit Address'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: labelController,
-                decoration: const InputDecoration(labelText: 'Label'),
+                decoration: InputDecoration(labelText: isRoute ? 'Route Name' : 'Label'),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: addressController,
-                decoration: const InputDecoration(labelText: 'Address'),
-              ),
+              if (!isRoute) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: addressController,
+                  decoration: const InputDecoration(labelText: 'Address'),
+                ),
+              ]
             ],
           ),
         ),
@@ -134,31 +156,22 @@ class _MyAddressesPageState extends State<MyAddresses> {
               final newLabel = labelController.text.trim();
               final newAddress = addressController.text.trim();
 
-              if (newLabel.isEmpty || newAddress.isEmpty) return;
+              if (newLabel.isEmpty || (!isRoute && newAddress.isEmpty)) return;
 
               try {
-                // Update only label and address
-                await supabase
-                    .from('addressDB')
-                    .update({
-                  'label': newLabel,
-                  'address': newAddress,
-                })
-                    .eq('address_id', addressRow['address_id']);
+                if (isRoute) {
+                  await supabase.from('routedb').update({'route_name': newLabel}).eq('route_id', row['id']);
+                } else {
+                  await supabase.from('addressDB').update({'label': newLabel, 'address': newAddress}).eq('address_id', row['id']);
+                }
 
                 if (!mounted) return;
                 Navigator.pop(context);
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Address updated')),
-                );
-
-                await _loadAddresses();
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Updated successfully')));
+                await _loadLocations();
               } catch (e) {
                 if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Failed to update address: $e')),
-                );
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Update failed: $e')));
               }
             },
             child: const Text('Save'),
@@ -168,64 +181,44 @@ class _MyAddressesPageState extends State<MyAddresses> {
     );
   }
 
-  void _showAddressMenu(Map<String, dynamic> addressRow, Offset position) async {
+  void _showAddressMenu(Map<String, dynamic> row, Offset position) async {
     final selected = await showMenu<String>(
       context: context,
-      position: RelativeRect.fromLTRB(
-        position.dx,
-        position.dy,
-        position.dx,
-        position.dy,
-      ),
+      position: RelativeRect.fromLTRB(position.dx, position.dy, position.dx, position.dy),
       items: const [
-        PopupMenuItem(
-          value: 'edit',
-          child: Text('Edit'),
-        ),
-        PopupMenuItem(
-          value: 'delete',
-          child: Text(
-            'Delete',
-            style: TextStyle(color: Colors.red),
-          ),
-        ),
+        PopupMenuItem(value: 'edit', child: Text('Edit')),
+        PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
       ],
     );
 
     if (selected == 'edit') {
-      await _showEditDialog(addressRow);
+      await _showEditDialog(row);
     } else if (selected == 'delete') {
-      await _deleteAddress(addressRow['address_id']);
+      await _deleteItem(row['id'], row['type']);
     }
   }
 
-  IconData _iconForLabel(String label) {
+  IconData _iconForLabel(String label, String type) {
+    if (type == 'route') return Icons.route;
+
     switch (label.toLowerCase()) {
-      case 'home':
-        return Icons.home_rounded;
-      case 'work':
-        return Icons.work_rounded;
-      case 'school':
-        return Icons.edit_rounded;
-      case 'gym':
-        return Icons.fitness_center_rounded;
-      default:
-        return Icons.location_on_rounded;
+      case 'home': return Icons.home_rounded;
+      case 'work': return Icons.work_rounded;
+      case 'school': return Icons.edit_rounded;
+      case 'gym': return Icons.fitness_center_rounded;
+      default: return Icons.location_on_rounded;
     }
   }
 
-  Color _iconColorForLabel(String label) {
+  Color _iconColorForLabel(String label, String type) {
+    if (type == 'route') return const Color(0xFF673AB7); // Distinct purple color for custom routes
+
     switch (label.toLowerCase()) {
-      case 'home':
-        return const Color(0xFFE53935);
-      case 'work':
-        return const Color(0xFF1A3ED4);
-      case 'school':
-        return const Color(0xFFD4860A);
-      case 'gym':
-        return const Color(0xFF1FCC00);
-      default:
-        return const Color(0xFF00BCD4);
+      case 'home': return const Color(0xFFE53935);
+      case 'work': return const Color(0xFF1A3ED4);
+      case 'school': return const Color(0xFFD4860A);
+      case 'gym': return const Color(0xFF1FCC00);
+      default: return const Color(0xFF00BCD4);
     }
   }
 
@@ -236,10 +229,7 @@ class _MyAddressesPageState extends State<MyAddresses> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF1A6FD4),
         foregroundColor: Colors.white,
-        title: const Text(
-          'My Addresses',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: const Text('My Locations', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.all(16),
@@ -247,10 +237,8 @@ class _MyAddressesPageState extends State<MyAddresses> {
           onPressed: () {
             Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (_) => const AddAddressPage(),
-              ),
-            ).then((_) => _loadAddresses());
+              MaterialPageRoute(builder: (_) => const AddAddressPage()),
+            ).then((_) => _loadLocations());
           },
           icon: const Icon(Icons.add_location_alt_outlined),
           label: const Text('Add Address'),
@@ -258,84 +246,49 @@ class _MyAddressesPageState extends State<MyAddresses> {
             backgroundColor: const Color(0xFF1A6FD4),
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
         ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _addresses.isEmpty
-          ? const Center(
-        child: Text(
-          'No saved addresses yet.',
-          style: TextStyle(fontSize: 16),
-        ),
-      )
+          : _savedLocations.isEmpty
+          ? const Center(child: Text('No saved locations yet.', style: TextStyle(fontSize: 16)))
           : ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: _addresses.length,
+        itemCount: _savedLocations.length,
         itemBuilder: (context, index) {
-          final row = _addresses[index];
+          final row = _savedLocations[index];
           final label = (row['label'] ?? '').toString();
+          final type = row['type'];
 
           return Container(
             margin: const EdgeInsets.only(bottom: 14),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ],
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 3))],
             ),
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 16,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
                     width: 52,
                     height: 52,
-                    decoration: BoxDecoration(
-                      color: _iconColorForLabel(label),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      _iconForLabel(label),
-                      color: Colors.white,
-                      size: 26,
-                    ),
+                    decoration: BoxDecoration(color: _iconColorForLabel(label, type), shape: BoxShape.circle),
+                    child: Icon(_iconForLabel(label, type), color: Colors.white, size: 26),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          label,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
+                        Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                         const SizedBox(height: 6),
-                        Text(
-                          row['address'] ?? '',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: Colors.black87,
-                          ),
-                        ),
+                        Text(row['address'] ?? '', style: const TextStyle(fontSize: 13, color: Colors.black87)),
                         const SizedBox(height: 10),
-                        // --- NEW SET TIME BUTTON ---
                         Align(
                           alignment: Alignment.centerLeft,
                           child: ElevatedButton.icon(
@@ -344,7 +297,8 @@ class _MyAddressesPageState extends State<MyAddresses> {
                                 context,
                                 MaterialPageRoute(
                                   builder: (_) => AddressAlarmsPage(
-                                    addressId: row['address_id'],
+                                    addressId: type == 'address' ? row['id'] : null,
+                                    routeId: type == 'route' ? row['id'] : null,
                                     addressLabel: label,
                                   ),
                                 ),
@@ -357,9 +311,7 @@ class _MyAddressesPageState extends State<MyAddresses> {
                               foregroundColor: const Color(0xFF1A6FD4),
                               elevation: 0,
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20),
-                              ),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                             ),
                           ),
                         ),
@@ -389,18 +341,11 @@ class _MyAddressesPageState extends State<MyAddresses> {
                           await RouteTrafficService.refreshMonitoring();
 
                           if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(value ? 'Alerts enabled for $label' : 'Alerts disabled for $label'),
-                            ),
-                          );
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(value ? 'Alerts enabled for $label' : 'Alerts disabled for $label')));
                         },
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        _routeConfigs[label]?.enabled == true ? 'Alerts: On' : 'Alerts: Off',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                      ),
+                      Text(_routeConfigs[label]?.enabled == true ? 'Alerts: On' : 'Alerts: Off', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
                     ],
                   ),
                   Row(
@@ -435,7 +380,7 @@ class _MyAddressesPageState extends State<MyAddresses> {
                                 if (mounted) {
                                   snack.hideCurrentSnackBar();
                                   snack.showSnackBar(SnackBar(content: Text(seedMsg)));
-                                  await _loadAddresses();
+                                  await _loadLocations();
                                 }
                               }
                             } else {
@@ -448,10 +393,7 @@ class _MyAddressesPageState extends State<MyAddresses> {
                         onTapDown: (details) {
                           _showAddressMenu(row, details.globalPosition);
                         },
-                        child: const Padding(
-                          padding: EdgeInsets.only(left: 8, top: 4),
-                          child: Icon(Icons.more_horiz),
-                        ),
+                        child: const Padding(padding: EdgeInsets.only(left: 8, top: 4), child: Icon(Icons.more_horiz)),
                       ),
                     ],
                   ),

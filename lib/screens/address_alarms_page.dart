@@ -1,15 +1,15 @@
-// lib/screens/address_alarms_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AddressAlarmsPage extends StatefulWidget {
-  final int addressId;
+  final int? addressId;
+  final int? routeId;
   final String addressLabel;
 
   const AddressAlarmsPage({
     super.key,
-    required this.addressId,
+    this.addressId,
+    this.routeId,
     required this.addressLabel,
   });
 
@@ -33,11 +33,15 @@ class _AddressAlarmsPageState extends State<AddressAlarmsPage> {
   Future<void> _loadAlarms() async {
     setState(() => _isLoading = true);
     try {
-      final data = await supabase
-          .from('time')
-          .select()
-          .eq('address_id', widget.addressId)
-          .order('created_at', ascending: true);
+      var query = supabase.from('time').select();
+
+      if (widget.addressId != null) {
+        query = query.eq('address_id', widget.addressId!);
+      } else if (widget.routeId != null) {
+        query = query.eq('route_id', widget.routeId!);
+      }
+
+      final data = await query.order('created_at', ascending: true);
 
       setState(() {
         _alarms = List<Map<String, dynamic>>.from(data);
@@ -98,8 +102,6 @@ class _AddressAlarmsPageState extends State<AddressAlarmsPage> {
               children: [
                 const Text('Set New Time', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 20),
-
-                // Start & End Time Pickers
                 Row(
                   children: [
                     Expanded(
@@ -126,8 +128,6 @@ class _AddressAlarmsPageState extends State<AddressAlarmsPage> {
                   ],
                 ),
                 const SizedBox(height: 20),
-
-                // Day Selectors
                 const Text('Repeat on', style: TextStyle(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 10),
                 Wrap(
@@ -140,17 +140,13 @@ class _AddressAlarmsPageState extends State<AddressAlarmsPage> {
                       selectedColor: const Color(0xFF1A6FD4).withOpacity(0.2),
                       onSelected: (selected) {
                         setModalState(() {
-                          if (selected) {
-                            selectedDays.add(day);
-                          } else {
-                            selectedDays.remove(day);
-                          }
+                          if (selected) selectedDays.add(day);
+                          else selectedDays.remove(day);
                         });
                       },
                     );
                   }).toList(),
                 ),
-
                 const SizedBox(height: 24),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
@@ -164,13 +160,13 @@ class _AddressAlarmsPageState extends State<AddressAlarmsPage> {
                       return;
                     }
 
-                    // Format for Supabase time column (HH:mm:ss)
                     final startFormatted = '${startTime!.hour.toString().padLeft(2, '0')}:${startTime!.minute.toString().padLeft(2, '0')}:00';
                     final endFormatted = '${endTime!.hour.toString().padLeft(2, '0')}:${endTime!.minute.toString().padLeft(2, '0')}:00';
 
                     try {
                       await supabase.from('time').insert({
-                        'address_id': widget.addressId,
+                        if (widget.addressId != null) 'address_id': widget.addressId,
+                        if (widget.routeId != null) 'route_id': widget.routeId,
                         'start_time': startFormatted,
                         'end_time': endFormatted,
                         'days_repeating': selectedDays,

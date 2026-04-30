@@ -120,7 +120,6 @@ class _HomeMapPageState extends State<HomeMapPage> {
   @override
   void initState() {
     super.initState();
-    print("🛑 DEBUG: initState called. Initializing map page...");
     _initLocation();
     _loadApiKey();
     _loadRecentSearches();
@@ -145,18 +144,15 @@ class _HomeMapPageState extends State<HomeMapPage> {
   }
 
   Future<void> _loadApiKey() async {
-    print("🛑 DEBUG: Attempting to load API Key...");
     try {
       final key = await ApiKeys.mapsApiKey();
       if (!mounted) return;
       setState(() => mapsApiKey = key);
-      print("🛑 DEBUG: API Key loaded successfully.");
     } catch (e) {
-      print("🛑 DEBUG ERROR: Failed to load API key! Error: $e");
+      print("Error loading API key: $e");
     }
   }
 
-  // --- Feature 2: Off-Route Detection ---
   bool _isUserOffRoute(Position currentPos) {
     if (selectedDirections == null) return false;
 
@@ -171,12 +167,10 @@ class _HomeMapPageState extends State<HomeMapPage> {
     return minDistance > offRouteThresholdMeters;
   }
 
-  // --- Feature 2: Recalculate Route ---
   Future<void> _recalculateRoute(Position currentPos) async {
     if (isRerouting || selectedPlace == null || googleService == null) return;
 
     setState(() => isRerouting = true);
-    print("🛑 DEBUG: User off route. Recalculating directions...");
 
     try {
       final directions = await googleService!.directions(
@@ -192,7 +186,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
 
         setState(() {
           selectedDirections = directions;
-          polylines.removeWhere((p) => p.polylineId == const PolylineId('route'));
+          polylines = polylines.where((p) => p.polylineId != const PolylineId('route')).toSet();
           polylines.add(Polyline(
             polylineId: const PolylineId('route'),
             points: points,
@@ -201,10 +195,9 @@ class _HomeMapPageState extends State<HomeMapPage> {
           ));
           navigationStepIndex = 0;
         });
-        print("🛑 DEBUG: Rerouting successful.");
       }
     } catch (e) {
-      print("🛑 DEBUG ERROR: Rerouting failed: $e");
+      print("Rerouting error: $e");
     } finally {
       if (mounted) setState(() => isRerouting = false);
     }
@@ -219,7 +212,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
     super.dispose();
   }
 
-  // --- Tracking & UI Dialog Logic ---
+  // --- Tracking & UI Dialog Logic with Polyline Redraw Fix ---
   Future<void> _toggleTracking() async {
     if (isTracking) {
       setState(() {
@@ -233,7 +226,8 @@ class _HomeMapPageState extends State<HomeMapPage> {
       } else {
         setState(() {
           trackedRoutePoints.clear();
-          polylines.removeWhere((p) => p.polylineId == const PolylineId('tracked_route'));
+          // Force UI to redraw by replacing the Set entirely
+          polylines = polylines.where((p) => p.polylineId != const PolylineId('tracked_route')).toSet();
         });
       }
     } else {
@@ -242,7 +236,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
         trackedRoutePoints.clear();
 
         WakelockPlus.enable();
-        polylines.removeWhere((p) => p.polylineId == const PolylineId('tracked_route'));
+        polylines = polylines.where((p) => p.polylineId != const PolylineId('tracked_route')).toSet();
         if (currentPosition != null) {
           trackedRoutePoints.add(LatLng(currentPosition!.latitude, currentPosition!.longitude));
         }
@@ -440,7 +434,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
                     Navigator.of(dialogContext).pop();
                     setState(() {
                       trackedRoutePoints.clear();
-                      polylines.removeWhere((p) => p.polylineId == const PolylineId('tracked_route'));
+                      polylines = polylines.where((p) => p.polylineId != const PolylineId('tracked_route')).toSet();
                     });
                   },
                   child: const Text('Discard', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
@@ -482,7 +476,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
 
       setState(() {
         trackedRoutePoints.clear();
-        polylines.removeWhere((p) => p.polylineId == const PolylineId('tracked_route'));
+        polylines = polylines.where((p) => p.polylineId != const PolylineId('tracked_route')).toSet();
       });
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to save route: $e'), backgroundColor: Colors.red));
@@ -536,7 +530,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
       if (isTracking) {
         setState(() {
           trackedRoutePoints.add(LatLng(p.latitude, p.longitude));
-          polylines.removeWhere((poly) => poly.polylineId == const PolylineId('tracked_route'));
+          polylines = polylines.where((poly) => poly.polylineId != const PolylineId('tracked_route')).toSet();
           polylines.add(Polyline(polylineId: const PolylineId('tracked_route'), points: List.from(trackedRoutePoints), width: 6, color: Colors.redAccent));
         });
       }
@@ -594,7 +588,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
                 .toList(growable: false);
 
             setState(() {
-              polylines.removeWhere((poly) => poly.polylineId == const PolylineId('route'));
+              polylines = polylines.where((poly) => poly.polylineId != const PolylineId('route')).toSet();
               polylines.add(Polyline(
                 polylineId: const PolylineId('route'),
                 points: updatedPoints,
@@ -648,7 +642,6 @@ class _HomeMapPageState extends State<HomeMapPage> {
         searching = false;
       });
     } catch (e) {
-      print("🛑 DEBUG ERROR: Autocomplete failed! Exception: $e");
       if (!mounted) return;
       setState(() => searching = false);
     }
@@ -667,7 +660,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
       searching = true;
       selectedPlace = null;
       selectedDirections = null;
-      polylines.removeWhere((p) => p.polylineId != const PolylineId('tracked_route'));
+      polylines = polylines.where((p) => p.polylineId == const PolylineId('tracked_route')).toSet();
       markers = {};
     });
 
@@ -710,10 +703,8 @@ class _HomeMapPageState extends State<HomeMapPage> {
   }
 
   Future<void> _selectRecentSearch(String query) async {
-    print("🛑 DEBUG: _selectRecentSearch triggered for query: '$query'");
     final service = googleService;
     if (service == null) {
-      print("🛑 DEBUG ERROR: googleService is null!");
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: Google API is not configured.'), backgroundColor: Colors.red));
       return;
     }
@@ -730,14 +721,12 @@ class _HomeMapPageState extends State<HomeMapPage> {
       setState(() => searching = false);
 
       if (results.isEmpty) {
-        print("🛑 DEBUG: No results found for '$query'.");
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Google could not find any results for "$query".'), backgroundColor: Colors.orange));
         return;
       }
 
       await _selectSuggestion(results.first);
     } catch (e) {
-      print("🛑 DEBUG ERROR: Manual search failed: $e");
       if (!mounted) return;
       setState(() => searching = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Search Error: $e'), backgroundColor: Colors.red));
@@ -770,7 +759,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
       selectedPlace = PlaceDetails(placeId: place.placeId, name: place.name, formattedAddress: place.address, lat: place.lat, lng: place.lng);
       selectedDirections = null;
       navigationActive = false;
-      polylines.removeWhere((p) => p.polylineId != const PolylineId('tracked_route'));
+      polylines = polylines.where((p) => p.polylineId == const PolylineId('tracked_route')).toSet();
       markers = {};
     });
 
@@ -944,7 +933,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
       selectedPlace = null;
       selectedDirections = null;
       searchController.clear();
-      polylines.removeWhere((p) => p.polylineId != const PolylineId('tracked_route'));
+      polylines = polylines.where((p) => p.polylineId == const PolylineId('tracked_route')).toSet();
       markers = {};
     });
   }
@@ -1012,7 +1001,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Log in to save history.'), backgroundColor: Colors.orange));
       }
     } catch (e) {
-      print("🛑 DEBUG ERROR: Failed to save to history: $e");
+      print("Error saving to history: $e");
     }
   }
 
@@ -1181,7 +1170,6 @@ class _HomeMapPageState extends State<HomeMapPage> {
                           textInputAction: TextInputAction.search,
                           onSubmitted: (value) async {
                             FocusScope.of(context).unfocus();
-                            print("🛑 DEBUG: Keyboard 'Enter' pressed with value: '$value'");
                             if (value.trim().isEmpty) return;
                             if (suggestions.isNotEmpty) {
                               _selectSuggestion(suggestions.first);
@@ -1211,7 +1199,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
                               selectedPlace = null;
                               selectedDirections = null;
                               navigationActive = false;
-                              polylines.removeWhere((p) => p.polylineId != const PolylineId('tracked_route'));
+                              polylines = polylines.where((p) => p.polylineId == const PolylineId('tracked_route')).toSet();
                               markers = {};
                             });
                           },
@@ -1318,7 +1306,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
                               selectedPlace = null;
                               selectedDirections = null;
                               navigationActive = false;
-                              polylines.removeWhere((p) => p.polylineId != const PolylineId('tracked_route'));
+                              polylines = polylines.where((p) => p.polylineId == const PolylineId('tracked_route')).toSet();
                               markers = {};
                             });
                             _stopInAppNavigation();
@@ -1343,8 +1331,11 @@ class _HomeMapPageState extends State<HomeMapPage> {
       )
           : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+
+      // --- UPDATED BOTTOM APP BAR ---
       bottomNavigationBar: BottomAppBar(
-        height: 70, padding: const EdgeInsets.symmetric(horizontal: 18),
+        height: 70,
+        padding: const EdgeInsets.symmetric(horizontal: 18),
         child: Row(
           children: [
             _BottomItem(
@@ -1360,6 +1351,8 @@ class _HomeMapPageState extends State<HomeMapPage> {
               },
             ),
             const Spacer(),
+
+            // NEW DESCRIPTIVE BUTTON
             ElevatedButton.icon(
               onPressed: _toggleTracking,
               icon: Icon(
@@ -1372,7 +1365,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
                 style: const TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 14,
-                  letterSpacing: 0.3, // Adds a tiny bit of readability
+                  letterSpacing: 0.3,
                 ),
               ),
               style: ElevatedButton.styleFrom(
@@ -1381,10 +1374,11 @@ class _HomeMapPageState extends State<HomeMapPage> {
                 elevation: 3,
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24), // Creates the nice pill shape
+                  borderRadius: BorderRadius.circular(24),
                 ),
               ),
             ),
+
             const Spacer(),
             _BottomItem(
               icon: Icons.history,
