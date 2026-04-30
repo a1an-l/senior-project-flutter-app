@@ -12,10 +12,8 @@ import '../services/saved_places.dart';
 import '../services/route_service.dart';
 import '../services/history_service.dart';
 
-// --- Manual Track Imports ---
 import '../services/last_known_location_store.dart';
 import '../services/notification_service.dart';
-// background tasks and workmanager are not used in this screen; imports removed
 import '../services/notifications_store.dart';
 import '../services/supabase_notifications_service.dart';
 import '../services/route_monitor_store.dart';
@@ -75,9 +73,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
   final double arrivalThresholdMeters = 50.0;
   final double offRouteThresholdMeters = 75.0; // Reroute if >75m off path
 
-  
   bool _isEnabled = false;
-  
 
   static const CameraPosition initialCameraPosition = CameraPosition(
     target: LatLng(26.3017, -98.1633),
@@ -85,41 +81,42 @@ class _HomeMapPageState extends State<HomeMapPage> {
   );
 
   Future<void> _loadTrafficToggle() async {
-  final settings = await BackgroundTrafficService.getTrafficSettings();
-  if (!mounted) return;
+    final settings = await BackgroundTrafficService.getTrafficSettings();
+    if (!mounted) return;
 
-  setState(() {
-    _isEnabled = settings['enabled'] ?? false;
-  });
-}
-
-Future<void> _toggleTrafficMonitoring(bool value) async {
-  setState(() => _isEnabled = value);
-
-  final settings = await BackgroundTrafficService.getTrafficSettings();
-  final intervalMinutes = settings['intervalMinutes'] ?? 15;
-  final radiusMiles = (settings['radiusMiles'] ?? 5).toDouble();
-  final notifyOnlySerious = settings['notifyOnlySerious'] ?? true;
-
-  if (value) {
-    await BackgroundTrafficService.startTrafficMonitoring(
-      intervalMinutes: intervalMinutes,
-      radiusMiles: radiusMiles,
-      notifyOnlySerious: notifyOnlySerious,
-    );
-  } else {
-    await BackgroundTrafficService.stopTrafficMonitoring();
+    setState(() {
+      _isEnabled = settings['enabled'] ?? false;
+    });
   }
 
-  if (!mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text(
-        value ? 'Traffic monitoring started' : 'Traffic monitoring stopped',
+  Future<void> _toggleTrafficMonitoring(bool value) async {
+    setState(() => _isEnabled = value);
+
+    final settings = await BackgroundTrafficService.getTrafficSettings();
+    final intervalMinutes = settings['intervalMinutes'] ?? 15;
+    final radiusMiles = (settings['radiusMiles'] ?? 5).toDouble();
+    final notifyOnlySerious = settings['notifyOnlySerious'] ?? true;
+
+    if (value) {
+      await BackgroundTrafficService.startTrafficMonitoring(
+        intervalMinutes: intervalMinutes,
+        radiusMiles: radiusMiles,
+        notifyOnlySerious: notifyOnlySerious,
+      );
+    } else {
+      await BackgroundTrafficService.stopTrafficMonitoring();
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          value ? 'Traffic monitoring started' : 'Traffic monitoring stopped',
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -164,7 +161,6 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
     if (selectedDirections == null) return false;
 
     double minDistance = double.infinity;
-    // Find the closest point on our current polyline to the user
     for (var p in selectedDirections!.polylinePoints) {
       final dist = Geolocator.distanceBetween(
           currentPos.latitude, currentPos.longitude, p[0], p[1]);
@@ -177,7 +173,6 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
 
   // --- Feature 2: Recalculate Route ---
   Future<void> _recalculateRoute(Position currentPos) async {
-    // Prevent multiple simultaneous API calls
     if (isRerouting || selectedPlace == null || googleService == null) return;
 
     setState(() => isRerouting = true);
@@ -204,7 +199,7 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
             width: 5,
             color: const Color(0xFF2F5CE5),
           ));
-          navigationStepIndex = 0; // Reset steps to the beginning of new route
+          navigationStepIndex = 0;
         });
         print("🛑 DEBUG: Rerouting successful.");
       }
@@ -224,44 +219,273 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
     super.dispose();
   }
 
-  // --- Play/Pause Tracking Logic ---
+  // --- Tracking & UI Dialog Logic ---
   Future<void> _toggleTracking() async {
     if (isTracking) {
-      // 1. STOP TRACKING
       setState(() {
         isTracking = false;
       });
 
-      // Let the screen go to sleep normally again
       WakelockPlus.disable();
 
       if (trackedRoutePoints.length >= 2) {
-        try {
-          final prefs = await SharedPreferences.getInstance();
-          final int? actualUserId = prefs.getInt('user_id');
-
-          if (actualUserId == null) {
-            if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('You must be logged in to save routes!'), backgroundColor: Colors.orange));
-            return;
-          }
-          await _routeService.saveNewRoute(trackedRoutePoints, actualUserId);
-          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Route saved successfully!'), backgroundColor: Colors.green));
-        } catch (e) {
-          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to save route: $e'), backgroundColor: Colors.red));
-        }
+        await _showSaveRouteDialog(List.from(trackedRoutePoints));
+      } else {
+        setState(() {
+          trackedRoutePoints.clear();
+          polylines.removeWhere((p) => p.polylineId == const PolylineId('tracked_route'));
+        });
       }
     } else {
       setState(() {
         isTracking = true;
         trackedRoutePoints.clear();
 
-        // Keep the screen awake while tracking
         WakelockPlus.enable();
         polylines.removeWhere((p) => p.polylineId == const PolylineId('tracked_route'));
         if (currentPosition != null) {
           trackedRoutePoints.add(LatLng(currentPosition!.latitude, currentPosition!.longitude));
         }
       });
+    }
+  }
+
+  Future<void> _showSaveRouteDialog(List<LatLng> points) async {
+    final TextEditingController nameController = TextEditingController();
+    List<Map<String, dynamic>> pendingAlarms = [];
+    final List<String> weekDays = ['M', 'T', 'W', 'Th', 'F', 'Sa', 'Su'];
+
+    String formatDbTime(String dbTime) {
+      final parts = dbTime.split(':');
+      if (parts.length >= 2) {
+        final h = int.tryParse(parts[0]) ?? 0;
+        final m = int.tryParse(parts[1]) ?? 0;
+        return TimeOfDay(hour: h, minute: m).format(context);
+      }
+      return dbTime;
+    }
+
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+
+            void openAlarmModal() {
+              TimeOfDay? startTime;
+              TimeOfDay? endTime;
+              List<String> selectedDays = [];
+
+              showModalBottomSheet(
+                context: dialogContext,
+                isScrollControlled: true,
+                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+                builder: (modalContext) => StatefulBuilder(
+                  builder: (context, setModalState) {
+                    return Padding(
+                      padding: EdgeInsets.only(
+                        bottom: MediaQuery.of(modalContext).viewInsets.bottom,
+                        left: 20, right: 20, top: 24,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text('Set Schedule', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 20),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () async {
+                                    final picked = await showTimePicker(context: modalContext, initialTime: TimeOfDay.now());
+                                    if (picked != null) setModalState(() => startTime = picked);
+                                  },
+                                  icon: const Icon(Icons.access_time),
+                                  label: Text(startTime?.format(context) ?? 'Start'),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () async {
+                                    final picked = await showTimePicker(context: modalContext, initialTime: TimeOfDay.now());
+                                    if (picked != null) setModalState(() => endTime = picked);
+                                  },
+                                  icon: const Icon(Icons.access_time_filled),
+                                  label: Text(endTime?.format(context) ?? 'End'),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+                          const Text('Repeat on', style: TextStyle(fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 6,
+                            children: weekDays.map((day) {
+                              final isSelected = selectedDays.contains(day);
+                              return ChoiceChip(
+                                label: Text(day),
+                                selected: isSelected,
+                                selectedColor: const Color(0xFF2F5CE5).withOpacity(0.2),
+                                onSelected: (selected) {
+                                  setModalState(() {
+                                    if (selected) selectedDays.add(day);
+                                    else selectedDays.remove(day);
+                                  });
+                                },
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2F5CE5), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16)),
+                            onPressed: () {
+                              if (startTime == null || endTime == null) {
+                                ScaffoldMessenger.of(modalContext).showSnackBar(const SnackBar(content: Text('Please select start and end times')));
+                                return;
+                              }
+                              final startFormatted = '${startTime!.hour.toString().padLeft(2, '0')}:${startTime!.minute.toString().padLeft(2, '0')}:00';
+                              final endFormatted = '${endTime!.hour.toString().padLeft(2, '0')}:${endTime!.minute.toString().padLeft(2, '0')}:00';
+
+                              setDialogState(() {
+                                pendingAlarms.add({
+                                  'start_time': startFormatted,
+                                  'end_time': endFormatted,
+                                  'days_repeating': List<String>.from(selectedDays),
+                                });
+                              });
+                              Navigator.pop(modalContext);
+                            },
+                            child: const Text('Add to Schedule'),
+                          ),
+                          const SizedBox(height: 30),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              );
+            }
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              title: const Text('Save Personal Route', style: TextStyle(fontWeight: FontWeight.w700)),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: 'e.g., Morning Commute',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF2F5CE5), width: 2)),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Schedules', style: TextStyle(fontWeight: FontWeight.bold)),
+                        TextButton.icon(
+                          onPressed: openAlarmModal,
+                          icon: const Icon(Icons.add_alarm, size: 18),
+                          label: const Text('Set Time'),
+                          style: TextButton.styleFrom(foregroundColor: const Color(0xFF2F5CE5)),
+                        )
+                      ],
+                    ),
+                    if (pendingAlarms.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Text('No schedules added yet.', style: TextStyle(color: Colors.black54, fontSize: 13)),
+                      )
+                    else
+                      Flexible(
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: pendingAlarms.length,
+                          itemBuilder: (context, index) {
+                            final alarm = pendingAlarms[index];
+                            final daysText = (alarm['days_repeating'] as List).isEmpty ? 'Once' : (alarm['days_repeating'] as List).join(', ');
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 6),
+                              elevation: 0,
+                              color: const Color(0xFFF2F6FF),
+                              child: ListTile(
+                                dense: true,
+                                title: Text('${formatDbTime(alarm['start_time'])} - ${formatDbTime(alarm['end_time'])}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                subtitle: Text(daysText, style: const TextStyle(fontSize: 12)),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.close, size: 18, color: Colors.redAccent),
+                                  onPressed: () => setDialogState(() => pendingAlarms.removeAt(index)),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      )
+                  ],
+                ),
+              ),
+              actions: <Widget>[
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop();
+                    setState(() {
+                      trackedRoutePoints.clear();
+                      polylines.removeWhere((p) => p.polylineId == const PolylineId('tracked_route'));
+                    });
+                  },
+                  child: const Text('Discard', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2F5CE5), foregroundColor: Colors.white),
+                  onPressed: () async {
+                    final routeName = nameController.text.trim();
+                    if (routeName.isEmpty) {
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(const SnackBar(content: Text('Please enter a name for your route'), backgroundColor: Colors.orange));
+                      return;
+                    }
+                    Navigator.of(dialogContext).pop();
+                    await _saveTrackedRoute(points, routeName, pendingAlarms);
+                  },
+                  child: const Text('Save', style: TextStyle(fontWeight: FontWeight.w700)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _saveTrackedRoute(List<LatLng> points, String routeName, List<Map<String, dynamic>> pendingAlarms) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final int? actualUserId = prefs.getInt('user_id');
+
+      if (actualUserId == null) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('You must be logged in to save routes!'), backgroundColor: Colors.orange));
+        return;
+      }
+
+      await _routeService.saveNewRoute(points, actualUserId, routeName, pendingAlarms);
+
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Route "$routeName" saved successfully!'), backgroundColor: Colors.green));
+
+      setState(() {
+        trackedRoutePoints.clear();
+        polylines.removeWhere((p) => p.polylineId == const PolylineId('tracked_route'));
+      });
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to save route: $e'), backgroundColor: Colors.red));
     }
   }
 
@@ -303,7 +527,7 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
 
     positionSubscription?.cancel();
     positionSubscription = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(accuracy: LocationAccuracy.bestForNavigation, distanceFilter: 1), //High-frequency polling, updates every 1 meter for smoothness
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.bestForNavigation, distanceFilter: 1),
     ).listen((p) async {
       currentPosition = p;
       await LastKnownLocationStore.save(lat: p.latitude, lng: p.longitude);
@@ -320,13 +544,12 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
       if (navigationActive) {
         await _updateNavigationProgress(p);
 
-        // 1. ARRIVAL DETECTION
         if (selectedPlace != null) {
           final distToDest = Geolocator.distanceBetween(
               p.latitude, p.longitude, selectedPlace!.lat, selectedPlace!.lng);
 
           if (distToDest <= arrivalThresholdMeters) {
-            _stopInAppNavigation(); // Stops tracking, resets UI
+            _stopInAppNavigation();
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -336,11 +559,10 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
                 ),
               );
             }
-            return; // Stop processing further for this tick
+            return;
           }
         }
 
-        // 2. ANTI-FLAPPING REROUTE (Debounce)
         if (_isUserOffRoute(p)) {
           offRouteCount++;
           if (offRouteCount >= 3) {
@@ -351,7 +573,6 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
           offRouteCount = 0;
         }
 
-        // --- NEW: 3. "EAT" THE ROUTE BEHIND THE USER ---
         if (selectedDirections != null && selectedDirections!.polylinePoints.isNotEmpty) {
           int closestIndex = 0;
           double minDistance = double.infinity;
@@ -365,7 +586,6 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
             }
           }
 
-          // If we have passed a few points, slice them off the array and redraw
           if (closestIndex > 2) {
             selectedDirections!.polylinePoints.removeRange(0, closestIndex - 1);
 
@@ -384,27 +604,21 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
             });
           }
         }
-        // --- END OF EAT ROUTE LOGIC ---
       }
 
       if (followUser && controller != null) {
-        // Programmatic camera move: animating to user's location
-        // --- NEW: Dynamic Navigation Camera ---
         if (navigationActive) {
           await controller!.animateCamera(CameraUpdate.newCameraPosition(
             CameraPosition(
               target: LatLng(p.latitude, p.longitude),
-              zoom: 18.5,       // Zoom in close
-              tilt: 55.0,       // 3D Tilt effect
-              bearing: p.heading, // Rotate map to match user's travel direction
+              zoom: 18.5,
+              tilt: 55.0,
+              bearing: p.heading,
             ),
           ));
         } else {
-          // Standard top-down follow
           await controller!.animateCamera(CameraUpdate.newLatLng(LatLng(p.latitude, p.longitude)));
         }
-        // Allow gestures to register again after the animation completes
-        // Allow gestures to register again after the animation completes
       }
     });
 
@@ -590,11 +804,8 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
       );
     }
 
-    if (!mounted) {
-      return;
-    }
-
     if (!mounted) return;
+
     final destLatLng = LatLng(place.lat, place.lng);
     final newMarkers = <Marker>{Marker(markerId: MarkerId('saved_${place.label.toLowerCase()}'), position: destLatLng, infoWindow: InfoWindow(title: place.name))};
     final newPolylines = Set<Polyline>.from(polylines);
@@ -714,7 +925,6 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
         );
         await NotificationsStore.add(notification);
 
-        // Also save to Supabase (Teammate's update)
         await SupabaseNotificationsService().saveNotification(
           title: notification.title,
           subtitle: notification.subtitle,
@@ -731,7 +941,6 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
       navigationActive = false;
       navigationStepIndex = 0;
 
-      // --- NEW: Clear map data completely upon stopping/arrival ---
       selectedPlace = null;
       selectedDirections = null;
       searchController.clear();
@@ -769,15 +978,12 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
     }
   }
 
-  // --- Start Navigation & Save to History ---
   Future<void> _startInAppNavigation() async {
     setState(() {
       navigationActive = true;
       followUser = true;
     });
-    // --- NEW: Lock the map from registering a user swipe during the swoop ---
-    // Programmatic camera move: animating to selected position
-    // --- NEW: Swoop camera into Navigation Mode immediately ---
+
     if (currentPosition != null && controller != null) {
       await controller!.animateCamera(CameraUpdate.newCameraPosition(
         CameraPosition(
@@ -789,10 +995,8 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
       ));
     }
 
-    // Release the lock after the animation finishes (1 second is safe)
     Future.delayed(const Duration(milliseconds: 1000), () {
       if (mounted) {
-        // animation complete
       }
     });
     try {
@@ -857,16 +1061,14 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
       ),
       body: Stack(
         children: [
-          // --- 1. BULLETPROOF CAMERA LOCK ---
           Listener(
             onPointerDown: (_) {
-              // Drop the lock whenever the user physically touches the screen
               setState(() => followUser = false);
             },
             child: GoogleMap(
               initialCameraPosition: initialCameraPosition,
               myLocationEnabled: myLocationEnabled,
-              myLocationButtonEnabled: false, // Turn off default top-right button
+              myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
               markers: markers,
               polylines: polylines,
@@ -878,10 +1080,9 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
             ),
           ),
 
-          // --- 2. CUSTOM RE-CENTER BUTTON (GLOBAL) ---
           if (!followUser)
             Positioned(
-              top: 12, // Tucked cleanly in the top right next to the "New" button
+              top: 12,
               right: 16,
               child: FloatingActionButton(
                 heroTag: "recenter_btn",
@@ -892,7 +1093,6 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
 
                   if (currentPosition != null && controller != null) {
                     if (navigationActive) {
-                      // Snap back into 3D navigation mode
                       controller!.animateCamera(CameraUpdate.newCameraPosition(
                         CameraPosition(
                           target: LatLng(currentPosition!.latitude, currentPosition!.longitude),
@@ -902,7 +1102,6 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
                         ),
                       ));
                     } else {
-                      // Snap back to standard 2D top-down mode
                       controller!.animateCamera(CameraUpdate.newCameraPosition(
                         CameraPosition(
                           target: LatLng(currentPosition!.latitude, currentPosition!.longitude),
@@ -957,10 +1156,9 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
             ),
           ),
 
-          // --- 3. PERMANENT TOP SEARCH BAR ---
           Positioned(
             left: 16, right: 16,
-            top: 64, // Sits perfectly below the top chips, dropdown extends downward
+            top: 64,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1067,7 +1265,6 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
             ),
           ),
 
-          // --- Top UI Panel: Hidden during active navigation ---
           if (selectedPlace != null && !navigationActive)
             SafeArea(
               child: Align(
@@ -1114,7 +1311,7 @@ Future<void> _toggleTrafficMonitoring(bool value) async {
                           const SizedBox.shrink(),
                         const SizedBox(width: 8),
                         IconButton(
-                            onPressed: () async {
+                          onPressed: () async {
                             setState(() {
                               searchController.clear();
                               suggestions = [];
@@ -1278,7 +1475,6 @@ class _NavigationBanner extends StatelessWidget {
     return Material(
       elevation: 10,
       borderRadius: BorderRadius.circular(14),
-      // I removed the InkWell here so the user specifically has to press the Stop button
       child: Container(
         width: double.infinity,
         margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -1314,10 +1510,8 @@ class _NavigationBanner extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 10),
-
-            // --- NEW BLUE STOP BUTTON ---
             GestureDetector(
-              onTap: onTap, // This triggers the _stopInAppNavigation function
+              onTap: onTap,
               child: Container(
                 width: 48,
                 height: 48,
@@ -1332,7 +1526,6 @@ class _NavigationBanner extends StatelessWidget {
                 ),
               ),
             ),
-
           ],
         ),
       ),

@@ -26,8 +26,9 @@ class _AddAddressPageState extends State<AddAddressPage> {
   List<PlaceSuggestion> suggestions = [];
   String sessionToken = DateTime.now().millisecondsSinceEpoch.toString();
 
-  TimeOfDay? _startTime;
-  TimeOfDay? _endTime;
+  // --- NEW: Temporary list to hold alarms before saving to database ---
+  final List<Map<String, dynamic>> _pendingAlarms = [];
+  final List<String> _weekDays = ['M', 'T', 'W', 'Th', 'F', 'Sa', 'Su'];
 
   @override
   void initState() {
@@ -118,54 +119,132 @@ class _AddAddressPageState extends State<AddAddressPage> {
     _addressFocus.unfocus();
   }
 
-  String? _timeToDbString(TimeOfDay? time) {
-    if (time == null) return null;
-    final h = time.hour.toString().padLeft(2, '0');
-    final m = time.minute.toString().padLeft(2, '0');
-    return '$h:$m:00';
-  }
+  // --- NEW: Add Alarm Modal (Saves to Memory, Not Database) ---
+  void _showAddAlarmModal() {
+    TimeOfDay? startTime;
+    TimeOfDay? endTime;
+    List<String> selectedDays = [];
 
-  Widget _buildTimeRow({
-    required String label,
-    required TimeOfDay? value,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300),
-          borderRadius: BorderRadius.circular(12),
-          color: Colors.white,
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.schedule, color: Color(0xFF1A6FD4)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+              left: 20, right: 20, top: 24,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('Set Schedule', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 20),
+
+                // Start & End Time Pickers
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          final picked = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+                          if (picked != null) setModalState(() => startTime = picked);
+                        },
+                        icon: const Icon(Icons.access_time),
+                        label: Text(startTime?.format(context) ?? 'Start Time'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          final picked = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+                          if (picked != null) setModalState(() => endTime = picked);
+                        },
+                        icon: const Icon(Icons.access_time_filled),
+                        label: Text(endTime?.format(context) ?? 'End Time'),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
+                const SizedBox(height: 20),
+
+                // Day Selectors
+                const Text('Repeat on', style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  children: _weekDays.map((day) {
+                    final isSelected = selectedDays.contains(day);
+                    return ChoiceChip(
+                      label: Text(day),
+                      selected: isSelected,
+                      selectedColor: const Color(0xFF1A6FD4).withOpacity(0.2),
+                      onSelected: (selected) {
+                        setModalState(() {
+                          if (selected) {
+                            selectedDays.add(day);
+                          } else {
+                            selectedDays.remove(day);
+                          }
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1A6FD4),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  onPressed: () {
+                    if (startTime == null || endTime == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select start and end times')));
+                      return;
+                    }
+
+                    final startFormatted = '${startTime!.hour.toString().padLeft(2, '0')}:${startTime!.minute.toString().padLeft(2, '0')}:00';
+                    final endFormatted = '${endTime!.hour.toString().padLeft(2, '0')}:${endTime!.minute.toString().padLeft(2, '0')}:00';
+
+                    setState(() {
+                      _pendingAlarms.add({
+                        'start_time': startFormatted,
+                        'end_time': endFormatted,
+                        'days_repeating': List<String>.from(selectedDays),
+                      });
+                    });
+
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Add to Schedule'),
+                ),
+                const SizedBox(height: 30),
+              ],
             ),
-            Text(
-              value == null ? 'Select' : value.format(context),
-              style: TextStyle(
-                fontSize: 14,
-                color: value == null ? Colors.black45 : Colors.black87,
-              ),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
 
+  // Helper to format the displayed time in the list
+  String _formatDbTime(String dbTime) {
+    final parts = dbTime.split(':');
+    if (parts.length >= 2) {
+      final h = int.tryParse(parts[0]) ?? 0;
+      final m = int.tryParse(parts[1]) ?? 0;
+      final time = TimeOfDay(hour: h, minute: m);
+      return time.format(context);
+    }
+    return dbTime;
+  }
+
+  // --- UPDATED: The Save Logic ---
   Future<void> _saveAddress() async {
     final label = _labelController.text.trim();
     final address = _addressController.text.trim();
@@ -188,7 +267,9 @@ class _AddAddressPageState extends State<AddAddressPage> {
       }
 
       final client = Supabase.instance.client;
+      int targetAddressId;
 
+      // 1. Check if it already exists
       final existing = await client
           .from('addressDB')
           .select('address_id')
@@ -197,27 +278,36 @@ class _AddAddressPageState extends State<AddAddressPage> {
           .maybeSingle();
 
       if (existing != null) {
+        // Update Address
         await client
             .from('addressDB')
-            .update({
-              'address': address,
-              'start_time': _timeToDbString(_startTime),
-              'end_time': _timeToDbString(_endTime),
-            })
+            .update({'address': address})
             .eq('address_id', existing['address_id']);
+        targetAddressId = existing['address_id'];
       } else {
-        await client.from('addressDB').insert({
+        // 2. Insert new address AND ask Supabase to return the newly generated ID
+        final insertResponse = await client.from('addressDB').insert({
           'user_id': userId,
           'label': label,
           'address': address,
-          'start_time': _timeToDbString(_startTime),
-          'end_time': _timeToDbString(_endTime),
           'created_at': DateTime.now().toIso8601String(),
-        });
+        }).select('address_id').single();
+
+        targetAddressId = insertResponse['address_id'];
       }
 
-      // Best-effort: automatically seed a baseline for this route in background.
-      // We don't await this to avoid blocking the UI; failures are non-fatal.
+      // 3. Now that we have a valid address_id, push all pending alarms to time table
+      if (_pendingAlarms.isNotEmpty) {
+        final alarmsToInsert = _pendingAlarms.map((alarm) => {
+          'address_id': targetAddressId,
+          'start_time': alarm['start_time'],
+          'end_time': alarm['end_time'],
+          'days_repeating': alarm['days_repeating']
+        }).toList();
+
+        await client.from('time').insert(alarmsToInsert);
+      }
+
       RouteTrafficService.seedBaseline(label).then((_) {}).catchError((_) {});
 
       if (!mounted) return;
@@ -286,7 +376,7 @@ class _AddAddressPageState extends State<AddAddressPage> {
                                 hintText: 'Search address',
                                 border: InputBorder.none,
                                 contentPadding:
-                                    EdgeInsets.symmetric(vertical: 14),
+                                EdgeInsets.symmetric(vertical: 14),
                               ),
                             ),
                           ),
@@ -338,34 +428,55 @@ class _AddAddressPageState extends State<AddAddressPage> {
                         ),
                       ),
                     ],
-                    const SizedBox(height: 16),
-                    _buildTimeRow(
-                      label: 'Start Time',
-                      value: _startTime,
-                      onTap: () async {
-                        final picked = await showTimePicker(
-                          context: context,
-                          initialTime: _startTime ?? TimeOfDay.now(),
-                        );
-                        if (picked != null) {
-                          setState(() => _startTime = picked);
-                        }
-                      },
+                    const SizedBox(height: 24),
+
+                    // --- NEW: Pending Alarms List ---
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Schedules', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        TextButton.icon(
+                          onPressed: _showAddAlarmModal,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Add Time'),
+                        )
+                      ],
                     ),
-                    const SizedBox(height: 12),
-                    _buildTimeRow(
-                      label: 'End Time',
-                      value: _endTime,
-                      onTap: () async {
-                        final picked = await showTimePicker(
-                          context: context,
-                          initialTime: _endTime ?? TimeOfDay.now(),
+                    if (_pendingAlarms.isEmpty)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: const Text('No schedules added yet.', style: TextStyle(color: Colors.black54), textAlign: TextAlign.center),
+                      )
+                    else
+                      ..._pendingAlarms.asMap().entries.map((entry) {
+                        int idx = entry.key;
+                        Map<String, dynamic> alarm = entry.value;
+                        final days = List<String>.from(alarm['days_repeating'] ?? []);
+                        final daysText = days.isEmpty ? 'Does not repeat' : days.join(', ');
+
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          child: ListTile(
+                            title: Text('${_formatDbTime(alarm['start_time'])} - ${_formatDbTime(alarm['end_time'])}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                            subtitle: Text('Days: $daysText'),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.red),
+                              onPressed: () {
+                                setState(() {
+                                  _pendingAlarms.removeAt(idx);
+                                });
+                              },
+                            ),
+                          ),
                         );
-                        if (picked != null) {
-                          setState(() => _endTime = picked);
-                        }
-                      },
-                    ),
+                      }),
                   ],
                 ),
               ),
@@ -386,17 +497,17 @@ class _AddAddressPageState extends State<AddAddressPage> {
                   ),
                   child: saving
                       ? const SizedBox(
-                          height: 22,
-                          width: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: Colors.white,
-                          ),
-                        )
+                    height: 22,
+                    width: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Colors.white,
+                    ),
+                  )
                       : const Text(
-                          'SAVE ADDRESS',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
+                    'SAVE ADDRESS',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
               ),
             ),
