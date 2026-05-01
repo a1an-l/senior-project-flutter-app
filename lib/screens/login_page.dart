@@ -66,6 +66,7 @@ class _LoginPageState extends State<LoginPage> {
         final prefs = await SharedPreferences.getInstance();
         // We grab the 'user_id' from the Supabase row and save it locally
         await prefs.setInt('user_id', data['user_id'] as int);
+        await prefs.setBool('remember_me', rememberMe);
 
         // Success: Transition to home page
         if (mounted) {
