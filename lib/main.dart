@@ -5,9 +5,11 @@ import 'screens/reset_password.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/background_traffic_service.dart';
 import 'package:workmanager/workmanager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'services/background_tasks.dart';
 import 'services/notification_service.dart';
+import 'screens/home_map_page.dart';
 
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
@@ -86,7 +88,64 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       navigatorKey: appNavigatorKey,
       debugShowCheckedModeBanner: false,
-      home: const LandingPage(),
+      home: const _StartupGate(),
+    );
+  }
+}
+
+class _StartupGate extends StatelessWidget {
+  const _StartupGate();
+
+  Future<Widget> _resolveStart() async {
+    final prefs = await SharedPreferences.getInstance();
+    final rememberMe = prefs.getBool('remember_me') ?? false;
+
+    final session = Supabase.instance.client.auth.currentSession;
+    if (!rememberMe) {
+      if (session != null) {
+        await Supabase.instance.client.auth.signOut();
+      }
+      await prefs.remove('user_id');
+      return const LandingPage();
+    }
+
+    if (session == null) {
+      await prefs.remove('user_id');
+      return const LandingPage();
+    }
+
+    final existingUserId = prefs.getInt('user_id');
+    if (existingUserId == null) {
+      final email = session.user.email;
+      if (email != null && email.isNotEmpty) {
+        final row = await Supabase.instance.client
+            .from('users')
+            .select('user_id')
+            .eq('email', email)
+            .maybeSingle();
+        final userId = row?['user_id'];
+        if (userId is int) {
+          await prefs.setInt('user_id', userId);
+        }
+      }
+    }
+
+    return const HomeMapPage();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Widget>(
+      future: _resolveStart(),
+      builder: (context, snapshot) {
+        final widget = snapshot.data;
+        if (widget != null) {
+          return widget;
+        }
+        return const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        );
+      },
     );
   }
 }

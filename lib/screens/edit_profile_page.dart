@@ -202,6 +202,7 @@ Future<void> _onSubmit() async {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('user_id');
+    await prefs.remove('remember_me');
 
     if (!mounted) return;
 
