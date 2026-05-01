@@ -47,6 +47,12 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _loadPermissionStatuses();
+  }
+
   String _formatLocationPermission(LocationPermission permission) {
     switch (permission) {
       case LocationPermission.always:

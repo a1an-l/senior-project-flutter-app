@@ -6,9 +6,15 @@ import 'edit_profile_page.dart';
 import 'settings_page.dart';
 
 class AppDrawer extends StatefulWidget {
-  const AppDrawer({super.key, required this.onOpenTrafficSettings});
+  const AppDrawer({super.key,
+  required this.onOpenTrafficSettings,
+  required this.onSettingsClosed,
+});
 
   final VoidCallback onOpenTrafficSettings;
+  final Future<void> Function() onSettingsClosed;
+
+ 
 
   @override
   State<AppDrawer> createState() => _AppDrawerState();
@@ -203,14 +209,15 @@ class _AppDrawerState extends State<AppDrawer> {
                     icon: Icons.settings_outlined,
                     label: 'Settings',
                     subtitle: 'View settings',
-                    onTap: () {
-                      
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const SettingsPage(),
-                        )
-                      );
+                    onTap: () async {  
+                      await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const SettingsPage(),
+                      ),
+                    );
+
+                    await widget.onSettingsClosed();
                     },
                   ),
                   _DrawerItem(

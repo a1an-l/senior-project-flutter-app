@@ -55,6 +55,65 @@ class _HomeMapPageState extends State<HomeMapPage> {
   Set<Marker> markers = {};
   Set<Polyline> polylines = {};
 
+  bool _darkMapEnabled = false;
+
+  static const String _darkMapStyle = '''
+[
+  {
+    "elementType": "geometry",
+    "stylers": [{"color": "#212121"}]
+  },
+  {
+    "elementType": "labels.icon",
+    "stylers": [{"visibility": "off"}]
+  },
+  {
+    "elementType": "labels.text.fill",
+    "stylers": [{"color": "#757575"}]
+  },
+  {
+    "elementType": "labels.text.stroke",
+    "stylers": [{"color": "#212121"}]
+  },
+  {
+    "featureType": "road",
+    "elementType": "geometry",
+    "stylers": [{"color": "#383838"}]
+  },
+  {
+    "featureType": "water",
+    "elementType": "geometry",
+    "stylers": [{"color": "#000000"}]
+  }
+]
+''';
+
+  //dark mode
+  Future<void> _loadMapThemeSetting() async {
+  final prefs = await SharedPreferences.getInstance();
+  final enabled = prefs.getBool('dark_map_enabled') ?? false;
+
+  if (!mounted) return;
+
+  setState(() {
+    _darkMapEnabled = enabled;
+  });
+
+  await _applyMapStyle();
+}
+
+Future<void> _applyMapStyle() async {
+  if (controller == null) return;
+
+  if (_darkMapEnabled) {
+    await controller!.setMapStyle(_darkMapStyle);
+  } else {
+    await controller!.setMapStyle(null);
+  }
+}
+
+
+
   // --- Route Tracking & History Variables ---
   bool isTracking = false;
   List<LatLng> trackedRoutePoints = [];
@@ -125,6 +184,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
     _loadRecentSearches();
     _refreshUnread();
     _loadTrafficToggle();
+    _loadMapThemeSetting();
     searchController.addListener(_onSearchChanged);
     searchFocusNode.addListener(() {
       if (mounted) {
@@ -831,6 +891,15 @@ class _HomeMapPageState extends State<HomeMapPage> {
   }
 
   Future<void> _checkTrafficNow() async {
+
+    final prefs = await SharedPreferences.getInstance();
+    final notificationsEnabled =
+        prefs.getBool('notifications_enabled') ?? true;
+
+    if (!notificationsEnabled) {
+      return;
+    }
+
     final origin = currentPosition;
     final service = googleService;
     if (!mounted || origin == null || service == null) {
@@ -1021,6 +1090,9 @@ class _HomeMapPageState extends State<HomeMapPage> {
     return Scaffold(
       key: scaffoldKey,
       drawer: AppDrawer(
+        onSettingsClosed: () async {
+          await _loadMapThemeSetting();
+        },
         onOpenTrafficSettings: () async {
           await Navigator.push(
             context,
@@ -1062,8 +1134,10 @@ class _HomeMapPageState extends State<HomeMapPage> {
               markers: markers,
               polylines: polylines,
               onTap: (_) => FocusScope.of(context).unfocus(),
-              onMapCreated: (value) {
+              onMapCreated: (value) async  {
                 controller = value;
+                await _loadMapThemeSetting();
+
                 if (myLocationEnabled) _initLocation();
               },
             ),

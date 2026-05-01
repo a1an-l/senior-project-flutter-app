@@ -5,6 +5,7 @@ import 'signup_page.dart';
 import 'home_map_page.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
+import 'forgot_password.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -163,7 +164,7 @@ class _LoginPageState extends State<LoginPage> {
                       child: TextField(
                         controller: _emailController, // Added controller
                         keyboardType: TextInputType.emailAddress,
-                        decoration: _inputDecoration('bob@gmail.com'),
+                        decoration: _inputDecoration('you@email.com'),
                       ),
                     ),
                     const SizedBox(height: 14),
@@ -210,7 +211,12 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         const Spacer(),
                         TextButton(
-                          onPressed: () {},
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const ForgotPasswordPage()),
+                            );
+                          },
                           style: TextButton.styleFrom(
                             padding: EdgeInsets.zero,
                             minimumSize: const Size(0, 0),
