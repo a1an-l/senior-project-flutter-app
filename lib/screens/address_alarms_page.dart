@@ -20,17 +20,17 @@ class AddressAlarmsPage extends StatefulWidget {
 class _AddressAlarmsPageState extends State<AddressAlarmsPage> {
   final supabase = Supabase.instance.client;
   bool _isLoading = true;
-  List<Map<String, dynamic>> _alarms = [];
+  List<Map<String, dynamic>> _alerts = [];
 
   final List<String> _weekDays = ['M', 'T', 'W', 'Th', 'F', 'Sa', 'Su'];
 
   @override
   void initState() {
     super.initState();
-    _loadAlarms();
+    _loadAlerts();
   }
 
-  Future<void> _loadAlarms() async {
+  Future<void> _loadAlerts() async {
     setState(() => _isLoading = true);
     try {
       var query = supabase.from('time').select();
@@ -44,23 +44,23 @@ class _AddressAlarmsPageState extends State<AddressAlarmsPage> {
       final data = await query.order('created_at', ascending: true);
 
       setState(() {
-        _alarms = List<Map<String, dynamic>>.from(data);
+        _alerts = List<Map<String, dynamic>>.from(data);
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error loading times: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error loading alerts: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _deleteAlarm(int timeId) async {
+  Future<void> _deleteAlert(int timeId) async {
     try {
       await supabase.from('time').delete().eq('time_id', timeId);
-      await _loadAlarms();
+      await _loadAlerts();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Time removed')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Alert removed')));
       }
     } catch (e) {
       if (mounted) {
@@ -80,10 +80,26 @@ class _AddressAlarmsPageState extends State<AddressAlarmsPage> {
     return dbTime;
   }
 
-  void _showAddAlarmModal() {
+  // Smart modal that handles BOTH adding new alerts and editing existing ones
+  void _showAlertModal({Map<String, dynamic>? existingAlert}) {
     TimeOfDay? startTime;
     TimeOfDay? endTime;
     List<String> selectedDays = [];
+
+    // Pre-fill the form if an existing alert was passed in
+    if (existingAlert != null) {
+      final startParts = existingAlert['start_time'].toString().split(':');
+      if (startParts.length >= 2) {
+        startTime = TimeOfDay(hour: int.tryParse(startParts[0]) ?? 0, minute: int.tryParse(startParts[1]) ?? 0);
+      }
+
+      final endParts = existingAlert['end_time'].toString().split(':');
+      if (endParts.length >= 2) {
+        endTime = TimeOfDay(hour: int.tryParse(endParts[0]) ?? 0, minute: int.tryParse(endParts[1]) ?? 0);
+      }
+
+      selectedDays = List<String>.from(existingAlert['days_repeating'] ?? []);
+    }
 
     showModalBottomSheet(
       context: context,
@@ -100,14 +116,17 @@ class _AddressAlarmsPageState extends State<AddressAlarmsPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text('Set New Time', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                Text(
+                    existingAlert == null ? 'Set New Alert' : 'Edit Alert',
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)
+                ),
                 const SizedBox(height: 20),
                 Row(
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: () async {
-                          final picked = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+                          final picked = await showTimePicker(context: context, initialTime: startTime ?? TimeOfDay.now());
                           if (picked != null) setModalState(() => startTime = picked);
                         },
                         icon: const Icon(Icons.access_time),
@@ -118,7 +137,7 @@ class _AddressAlarmsPageState extends State<AddressAlarmsPage> {
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: () async {
-                          final picked = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+                          final picked = await showTimePicker(context: context, initialTime: endTime ?? TimeOfDay.now());
                           if (picked != null) setModalState(() => endTime = picked);
                         },
                         icon: const Icon(Icons.access_time_filled),
@@ -140,8 +159,11 @@ class _AddressAlarmsPageState extends State<AddressAlarmsPage> {
                       selectedColor: const Color(0xFF1A6FD4).withOpacity(0.2),
                       onSelected: (selected) {
                         setModalState(() {
-                          if (selected) selectedDays.add(day);
-                          else selectedDays.remove(day);
+                          if (selected) {
+                            selectedDays.add(day);
+                          } else {
+                            selectedDays.remove(day);
+                          }
                         });
                       },
                     );
@@ -164,23 +186,33 @@ class _AddressAlarmsPageState extends State<AddressAlarmsPage> {
                     final endFormatted = '${endTime!.hour.toString().padLeft(2, '0')}:${endTime!.minute.toString().padLeft(2, '0')}:00';
 
                     try {
-                      await supabase.from('time').insert({
-                        if (widget.addressId != null) 'address_id': widget.addressId,
-                        if (widget.routeId != null) 'route_id': widget.routeId,
-                        'start_time': startFormatted,
-                        'end_time': endFormatted,
-                        'days_repeating': selectedDays,
-                      });
+                      if (existingAlert == null) {
+                        // Creating a brand new alert
+                        await supabase.from('time').insert({
+                          if (widget.addressId != null) 'address_id': widget.addressId,
+                          if (widget.routeId != null) 'route_id': widget.routeId,
+                          'start_time': startFormatted,
+                          'end_time': endFormatted,
+                          'days_repeating': selectedDays,
+                        });
+                      } else {
+                        // Updating an existing alert
+                        await supabase.from('time').update({
+                          'start_time': startFormatted,
+                          'end_time': endFormatted,
+                          'days_repeating': selectedDays,
+                        }).eq('time_id', existingAlert['time_id']);
+                      }
 
                       if (mounted) {
                         Navigator.pop(context);
-                        _loadAlarms();
+                        _loadAlerts(); // Refresh the list
                       }
                     } catch (e) {
                       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to save: $e')));
                     }
                   },
-                  child: const Text('Save Alarm'),
+                  child: Text(existingAlert == null ? 'Save Alert' : 'Update Alert'),
                 ),
                 const SizedBox(height: 30),
               ],
@@ -198,24 +230,24 @@ class _AddressAlarmsPageState extends State<AddressAlarmsPage> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF1A6FD4),
         foregroundColor: Colors.white,
-        title: Text('${widget.addressLabel} Alarms', style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: Text('${widget.addressLabel} Alerts', style: const TextStyle(fontWeight: FontWeight.bold)),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _showAddAlarmModal,
+        onPressed: () => _showAlertModal(), // Passing nothing means it's a "New" alert
         backgroundColor: const Color(0xFF1A6FD4),
         foregroundColor: Colors.white,
         child: const Icon(Icons.add),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _alarms.isEmpty
-          ? const Center(child: Text('No alarms set for this location yet.'))
+          : _alerts.isEmpty
+          ? const Center(child: Text('No alerts set for this location yet.'))
           : ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: _alarms.length,
+        itemCount: _alerts.length,
         itemBuilder: (context, index) {
-          final alarm = _alarms[index];
-          final days = List<String>.from(alarm['days_repeating'] ?? []);
+          final alert = _alerts[index];
+          final days = List<String>.from(alert['days_repeating'] ?? []);
           final daysText = days.isEmpty ? 'Does not repeat' : days.join(', ');
 
           return Card(
@@ -224,13 +256,24 @@ class _AddressAlarmsPageState extends State<AddressAlarmsPage> {
             child: ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               title: Text(
-                '${_formatDbTime(alarm['start_time'])} - ${_formatDbTime(alarm['end_time'])}',
+                '${_formatDbTime(alert['start_time'])} - ${_formatDbTime(alert['end_time'])}',
                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
               ),
               subtitle: Text('Days: $daysText', style: const TextStyle(color: Colors.black54)),
-              trailing: IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.red),
-                onPressed: () => _deleteAlarm(alarm['time_id']),
+
+              // Added a Row to hold both Edit and Delete buttons
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined, color: Colors.blue),
+                    onPressed: () => _showAlertModal(existingAlert: alert), // Pass the existing alert to edit
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    onPressed: () => _deleteAlert(alert['time_id']),
+                  ),
+                ],
               ),
             ),
           );
