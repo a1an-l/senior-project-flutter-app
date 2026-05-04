@@ -57,7 +57,6 @@ class _HomeMapPageState extends State<HomeMapPage> {
 
   Color get _surfaceColor => Theme.of(context).cardColor;
   Color get _primaryColor => Theme.of(context).colorScheme.primary;
-  Color get _onSurfaceColor => Theme.of(context).colorScheme.onSurface;
   Color get _dividerColor => Theme.of(context).dividerColor;
   Color get _subtleTextColor =>
   Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey;
