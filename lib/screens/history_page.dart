@@ -29,7 +29,6 @@ class _HistoryPageState extends State<HistoryPage> {
     });
 
     try {
-      // 1. Find out who is logged in
       final prefs = await SharedPreferences.getInstance();
       final int? currentUserId = prefs.getInt('user_id');
 
@@ -41,7 +40,6 @@ class _HistoryPageState extends State<HistoryPage> {
         return;
       }
 
-      // 2. Fetch their data from Supabase
       final data = await _historyService.getUserHistory(currentUserId);
 
       setState(() {
@@ -56,7 +54,6 @@ class _HistoryPageState extends State<HistoryPage> {
     }
   }
 
-  // Helper function to format the complicated database timestamp into a readable date
   String _formatDate(String timestamp) {
     try {
       final DateTime date = DateTime.parse(timestamp).toLocal();
@@ -68,36 +65,53 @@ class _HistoryPageState extends State<HistoryPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F7F7),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF2F5CE5),
-        foregroundColor: Colors.white,
-        title: const Text('Navigation History', style: TextStyle(fontWeight: FontWeight.w700)),
+        backgroundColor: theme.appBarTheme.backgroundColor,
+        foregroundColor: theme.appBarTheme.foregroundColor,
+        title: const Text(
+          'Navigation History',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
         centerTitle: true,
       ),
-      body: _buildBody(),
+      body: _buildBody(theme),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(ThemeData theme) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: Color(0xFF2F5CE5)));
+      return Center(
+        child: CircularProgressIndicator(
+          color: theme.colorScheme.primary,
+        ),
+      );
     }
 
     if (_errorMessage != null) {
       return Center(
-        child: Text(_errorMessage!, style: const TextStyle(color: Colors.red, fontSize: 16)),
+        child: Text(
+          _errorMessage!,
+          style: const TextStyle(color: Colors.red, fontSize: 16),
+        ),
       );
     }
 
     if (_historyItems.isEmpty) {
-      return const Center(
-        child: Text("You haven't navigated anywhere yet!", style: TextStyle(fontSize: 16, color: Colors.grey)),
+      return Center(
+        child: Text(
+          "You haven't navigated anywhere yet!",
+          style: TextStyle(
+            fontSize: 16,
+            color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
+          ),
+        ),
       );
     }
 
-    // Displays the list of history items
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: _historyItems.length,
@@ -105,12 +119,27 @@ class _HistoryPageState extends State<HistoryPage> {
         final item = _historyItems[index];
         final destination = item['dst_address'] ?? 'Unknown Destination';
         final start = item['Start_add'] ?? 'Unknown Start';
-        final date = item['timestamp'] != null ? _formatDate(item['timestamp']) : 'Unknown Date';
+        final date =
+            item['timestamp'] != null ? _formatDate(item['timestamp']) : 'Unknown Date';
 
-        return Card(
-          elevation: 2,
+        return Container(
           margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          decoration: BoxDecoration(
+            color: theme.cardColor,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(
+                  theme.brightness == Brightness.dark ? 0.18 : 0.06,
+                ),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+            border: Border.all(
+              color: theme.dividerColor.withOpacity(0.5),
+            ),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -118,28 +147,46 @@ class _HistoryPageState extends State<HistoryPage> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.location_on, color: Color(0xFFE53935), size: 20),
+                    const Icon(
+                      Icons.location_on,
+                      color: Color(0xFFE53935),
+                      size: 20,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         destination,
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onSurface,
+                        ),
                       ),
                     ),
                   ],
                 ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Divider(
+                    height: 1,
+                    color: theme.dividerColor,
+                  ),
                 ),
                 Row(
                   children: [
-                    const Icon(Icons.my_location, color: Colors.grey, size: 16),
+                    Icon(
+                      Icons.my_location,
+                      color: theme.textTheme.bodySmall?.color,
+                      size: 16,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         "From: $start",
-                        style: const TextStyle(fontSize: 13, color: Colors.black87),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: theme.colorScheme.onSurface,
+                        ),
                       ),
                     ),
                   ],
@@ -147,11 +194,18 @@ class _HistoryPageState extends State<HistoryPage> {
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    const Icon(Icons.access_time, color: Colors.grey, size: 16),
+                    Icon(
+                      Icons.access_time,
+                      color: theme.textTheme.bodySmall?.color,
+                      size: 16,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       date,
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.textTheme.bodySmall?.color,
+                      ),
                     ),
                   ],
                 ),

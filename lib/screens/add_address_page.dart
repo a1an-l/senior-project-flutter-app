@@ -26,7 +26,6 @@ class _AddAddressPageState extends State<AddAddressPage> {
   List<PlaceSuggestion> suggestions = [];
   String sessionToken = DateTime.now().millisecondsSinceEpoch.toString();
 
-  // --- NEW: Temporary list to hold alarms before saving to database ---
   final List<Map<String, dynamic>> _pendingAlarms = [];
   final List<String> _weekDays = ['M', 'T', 'W', 'Th', 'F', 'Sa', 'Su'];
 
@@ -119,60 +118,96 @@ class _AddAddressPageState extends State<AddAddressPage> {
     _addressFocus.unfocus();
   }
 
-  // --- NEW: Add Alarm Modal (Saves to Memory, Not Database) ---
   void _showAddAlarmModal() {
+    final theme = Theme.of(context);
     TimeOfDay? startTime;
     TimeOfDay? endTime;
     List<String> selectedDays = [];
 
     showModalBottomSheet(
       context: context,
+      backgroundColor: theme.cardColor,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) {
           return Padding(
             padding: EdgeInsets.only(
               bottom: MediaQuery.of(context).viewInsets.bottom,
-              left: 20, right: 20, top: 24,
+              left: 20,
+              right: 20,
+              top: 24,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text('Set Schedule', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                Text(
+                  'Set Schedule',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
                 const SizedBox(height: 20),
-
-                // Start & End Time Pickers
                 Row(
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: () async {
-                          final picked = await showTimePicker(context: context, initialTime: TimeOfDay.now());
-                          if (picked != null) setModalState(() => startTime = picked);
+                          final picked = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay.now(),
+                          );
+                          if (picked != null) {
+                            setModalState(() => startTime = picked);
+                          }
                         },
-                        icon: const Icon(Icons.access_time),
-                        label: Text(startTime?.format(context) ?? 'Start Time'),
+                        icon: Icon(
+                          Icons.access_time,
+                          color: theme.colorScheme.primary,
+                        ),
+                        label: Text(
+                          startTime?.format(context) ?? 'Start Time',
+                          style: TextStyle(color: theme.colorScheme.onSurface),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: () async {
-                          final picked = await showTimePicker(context: context, initialTime: TimeOfDay.now());
-                          if (picked != null) setModalState(() => endTime = picked);
+                          final picked = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay.now(),
+                          );
+                          if (picked != null) {
+                            setModalState(() => endTime = picked);
+                          }
                         },
-                        icon: const Icon(Icons.access_time_filled),
-                        label: Text(endTime?.format(context) ?? 'End Time'),
+                        icon: Icon(
+                          Icons.access_time_filled,
+                          color: theme.colorScheme.primary,
+                        ),
+                        label: Text(
+                          endTime?.format(context) ?? 'End Time',
+                          style: TextStyle(color: theme.colorScheme.onSurface),
+                        ),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 20),
-
-                // Day Selectors
-                const Text('Repeat on', style: TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  'Repeat on',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
                 const SizedBox(height: 10),
                 Wrap(
                   spacing: 8,
@@ -181,7 +216,8 @@ class _AddAddressPageState extends State<AddAddressPage> {
                     return ChoiceChip(
                       label: Text(day),
                       selected: isSelected,
-                      selectedColor: const Color(0xFF1A6FD4).withOpacity(0.2),
+                      selectedColor:
+                          theme.colorScheme.primary.withOpacity(0.2),
                       onSelected: (selected) {
                         setModalState(() {
                           if (selected) {
@@ -194,22 +230,27 @@ class _AddAddressPageState extends State<AddAddressPage> {
                     );
                   }).toList(),
                 ),
-
                 const SizedBox(height: 24),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1A6FD4),
+                    backgroundColor: theme.colorScheme.primary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
                   onPressed: () {
                     if (startTime == null || endTime == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select start and end times')));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Please select start and end times'),
+                        ),
+                      );
                       return;
                     }
 
-                    final startFormatted = '${startTime!.hour.toString().padLeft(2, '0')}:${startTime!.minute.toString().padLeft(2, '0')}:00';
-                    final endFormatted = '${endTime!.hour.toString().padLeft(2, '0')}:${endTime!.minute.toString().padLeft(2, '0')}:00';
+                    final startFormatted =
+                        '${startTime!.hour.toString().padLeft(2, '0')}:${startTime!.minute.toString().padLeft(2, '0')}:00';
+                    final endFormatted =
+                        '${endTime!.hour.toString().padLeft(2, '0')}:${endTime!.minute.toString().padLeft(2, '0')}:00';
 
                     setState(() {
                       _pendingAlarms.add({
@@ -232,7 +273,6 @@ class _AddAddressPageState extends State<AddAddressPage> {
     );
   }
 
-  // Helper to format the displayed time in the list
   String _formatDbTime(String dbTime) {
     final parts = dbTime.split(':');
     if (parts.length >= 2) {
@@ -244,7 +284,6 @@ class _AddAddressPageState extends State<AddAddressPage> {
     return dbTime;
   }
 
-  // --- UPDATED: The Save Logic ---
   Future<void> _saveAddress() async {
     final label = _labelController.text.trim();
     final address = _addressController.text.trim();
@@ -269,7 +308,6 @@ class _AddAddressPageState extends State<AddAddressPage> {
       final client = Supabase.instance.client;
       int targetAddressId;
 
-      // 1. Check if it already exists
       final existing = await client
           .from('addressDB')
           .select('address_id')
@@ -278,32 +316,35 @@ class _AddAddressPageState extends State<AddAddressPage> {
           .maybeSingle();
 
       if (existing != null) {
-        // Update Address
         await client
             .from('addressDB')
             .update({'address': address})
             .eq('address_id', existing['address_id']);
         targetAddressId = existing['address_id'];
       } else {
-        // 2. Insert new address AND ask Supabase to return the newly generated ID
-        final insertResponse = await client.from('addressDB').insert({
-          'user_id': userId,
-          'label': label,
-          'address': address,
-          'created_at': DateTime.now().toIso8601String(),
-        }).select('address_id').single();
+        final insertResponse = await client
+            .from('addressDB')
+            .insert({
+              'user_id': userId,
+              'label': label,
+              'address': address,
+              'created_at': DateTime.now().toIso8601String(),
+            })
+            .select('address_id')
+            .single();
 
         targetAddressId = insertResponse['address_id'];
       }
 
-      // 3. Now that we have a valid address_id, push all pending alarms to time table
       if (_pendingAlarms.isNotEmpty) {
-        final alarmsToInsert = _pendingAlarms.map((alarm) => {
-          'address_id': targetAddressId,
-          'start_time': alarm['start_time'],
-          'end_time': alarm['end_time'],
-          'days_repeating': alarm['days_repeating']
-        }).toList();
+        final alarmsToInsert = _pendingAlarms
+            .map((alarm) => {
+                  'address_id': targetAddressId,
+                  'start_time': alarm['start_time'],
+                  'end_time': alarm['end_time'],
+                  'days_repeating': alarm['days_repeating'],
+                })
+            .toList();
 
         await client.from('time').insert(alarmsToInsert);
       }
@@ -326,11 +367,15 @@ class _AddAddressPageState extends State<AddAddressPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1A6FD4),
-        foregroundColor: Colors.white,
+        backgroundColor:
+            theme.appBarTheme.backgroundColor ?? theme.colorScheme.primary,
+        foregroundColor:
+            theme.appBarTheme.foregroundColor ?? Colors.white,
         title: const Text(
           'Add Address',
           style: TextStyle(fontWeight: FontWeight.bold),
@@ -346,11 +391,16 @@ class _AddAddressPageState extends State<AddAddressPage> {
                   children: [
                     TextField(
                       controller: _labelController,
+                      style: TextStyle(color: theme.colorScheme.onSurface),
                       decoration: InputDecoration(
                         labelText: 'Label',
                         hintText: 'Home, Work, School...',
+                        labelStyle:
+                            TextStyle(color: theme.textTheme.bodyMedium?.color),
+                        hintStyle:
+                            TextStyle(color: theme.textTheme.bodySmall?.color),
                         filled: true,
-                        fillColor: Colors.white,
+                        fillColor: theme.cardColor,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -359,34 +409,44 @@ class _AddAddressPageState extends State<AddAddressPage> {
                     const SizedBox(height: 16),
                     Container(
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: theme.cardColor,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade300),
+                        border: Border.all(color: theme.dividerColor),
                       ),
                       child: Row(
                         children: [
                           const SizedBox(width: 10),
-                          const Icon(Icons.search, color: Color(0xFFAAAAAA)),
+                          Icon(
+                            Icons.search,
+                            color: theme.textTheme.bodySmall?.color,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: TextField(
                               controller: _addressController,
                               focusNode: _addressFocus,
-                              decoration: const InputDecoration(
+                              style: TextStyle(color: theme.colorScheme.onSurface),
+                              decoration: InputDecoration(
                                 hintText: 'Search address',
+                                hintStyle: TextStyle(
+                                  color: theme.textTheme.bodySmall?.color,
+                                ),
                                 border: InputBorder.none,
                                 contentPadding:
-                                EdgeInsets.symmetric(vertical: 14),
+                                    const EdgeInsets.symmetric(vertical: 14),
                               ),
                             ),
                           ),
                           if (searching || loadingKey)
-                            const SizedBox(
+                            SizedBox(
                               width: 38,
                               height: 38,
                               child: Padding(
-                                padding: EdgeInsets.all(10),
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                padding: const EdgeInsets.all(10),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: theme.colorScheme.primary,
+                                ),
                               ),
                             )
                           else if (_addressController.text.isNotEmpty)
@@ -397,7 +457,10 @@ class _AddAddressPageState extends State<AddAddressPage> {
                                   suggestions = [];
                                 });
                               },
-                              icon: const Icon(Icons.close),
+                              icon: Icon(
+                                Icons.close,
+                                color: theme.colorScheme.onSurface,
+                              ),
                             ),
                         ],
                       ),
@@ -406,14 +469,21 @@ class _AddAddressPageState extends State<AddAddressPage> {
                       const SizedBox(height: 12),
                       Container(
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: theme.cardColor,
                           borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: theme.dividerColor.withOpacity(0.4),
+                          ),
                         ),
                         child: ListView.separated(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
-                          itemCount: suggestions.length > 6 ? 6 : suggestions.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemCount:
+                              suggestions.length > 6 ? 6 : suggestions.length,
+                          separatorBuilder: (_, __) => Divider(
+                            height: 1,
+                            color: theme.dividerColor,
+                          ),
                           itemBuilder: (context, index) {
                             final item = suggestions[index];
                             return ListTile(
@@ -421,6 +491,9 @@ class _AddAddressPageState extends State<AddAddressPage> {
                                 item.description,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: theme.colorScheme.onSurface,
+                                ),
                               ),
                               onTap: () => _selectSuggestion(item),
                             );
@@ -429,17 +502,30 @@ class _AddAddressPageState extends State<AddAddressPage> {
                       ),
                     ],
                     const SizedBox(height: 24),
-
-                    // --- NEW: Pending Alarms List ---
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Schedules', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        Text(
+                          'Schedules',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
                         TextButton.icon(
                           onPressed: _showAddAlarmModal,
-                          icon: const Icon(Icons.add),
-                          label: const Text('Add Time'),
-                        )
+                          icon: Icon(
+                            Icons.add,
+                            color: theme.colorScheme.primary,
+                          ),
+                          label: Text(
+                            'Add Time',
+                            style: TextStyle(
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                     if (_pendingAlarms.isEmpty)
@@ -447,27 +533,53 @@ class _AddAddressPageState extends State<AddAddressPage> {
                         width: double.infinity,
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: theme.cardColor,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.shade300),
+                          border: Border.all(color: theme.dividerColor),
                         ),
-                        child: const Text('No schedules added yet.', style: TextStyle(color: Colors.black54), textAlign: TextAlign.center),
+                        child: Text(
+                          'No schedules added yet.',
+                          style: TextStyle(
+                            color: theme.textTheme.bodySmall?.color,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
                       )
                     else
                       ..._pendingAlarms.asMap().entries.map((entry) {
-                        int idx = entry.key;
-                        Map<String, dynamic> alarm = entry.value;
-                        final days = List<String>.from(alarm['days_repeating'] ?? []);
-                        final daysText = days.isEmpty ? 'Does not repeat' : days.join(', ');
+                        final idx = entry.key;
+                        final alarm = entry.value;
+                        final days = List<String>.from(
+                          alarm['days_repeating'] ?? [],
+                        );
+                        final daysText =
+                            days.isEmpty ? 'Does not repeat' : days.join(', ');
 
                         return Card(
+                          color: theme.cardColor,
                           margin: const EdgeInsets.only(bottom: 8),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                           child: ListTile(
-                            title: Text('${_formatDbTime(alarm['start_time'])} - ${_formatDbTime(alarm['end_time'])}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text('Days: $daysText'),
+                            title: Text(
+                              '${_formatDbTime(alarm['start_time'])} - ${_formatDbTime(alarm['end_time'])}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.onSurface,
+                              ),
+                            ),
+                            subtitle: Text(
+                              'Days: $daysText',
+                              style: TextStyle(
+                                color: theme.textTheme.bodySmall?.color,
+                              ),
+                            ),
                             trailing: IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Colors.red),
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                color: Colors.red,
+                              ),
                               onPressed: () {
                                 setState(() {
                                   _pendingAlarms.removeAt(idx);
@@ -488,7 +600,7 @@ class _AddAddressPageState extends State<AddAddressPage> {
                 child: ElevatedButton(
                   onPressed: saving ? null : _saveAddress,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1A6FD4),
+                    backgroundColor: theme.colorScheme.primary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
@@ -497,17 +609,17 @@ class _AddAddressPageState extends State<AddAddressPage> {
                   ),
                   child: saving
                       ? const SizedBox(
-                    height: 22,
-                    width: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      color: Colors.white,
-                    ),
-                  )
+                          height: 22,
+                          width: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color: Colors.white,
+                          ),
+                        )
                       : const Text(
-                    'SAVE ADDRESS',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
+                          'SAVE ADDRESS',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                 ),
               ),
             ),

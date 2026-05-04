@@ -101,11 +101,19 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF2F5CE5),
-        foregroundColor: Colors.white,
-        title: const Text('Notifications', style: TextStyle(fontWeight: FontWeight.w700)),
+        backgroundColor:
+            theme.appBarTheme.backgroundColor ?? theme.colorScheme.primary,
+        foregroundColor:
+            theme.appBarTheme.foregroundColor ?? Colors.white,
+        title: const Text(
+          'Notifications',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.chevron_left),
@@ -113,7 +121,11 @@ class _NotificationsPageState extends State<NotificationsPage> {
         ),
       ),
       body: loading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+              child: CircularProgressIndicator(
+                color: theme.colorScheme.primary,
+              ),
+            )
           : isGuest
               ? Center(
                   child: Padding(
@@ -124,7 +136,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                         Icon(
                           Icons.notifications_off_outlined,
                           size: 64,
-                          color: Colors.grey[400],
+                          color: theme.textTheme.bodySmall?.color,
                         ),
                         const SizedBox(height: 16),
                         Text(
@@ -132,7 +144,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
-                            color: Colors.grey[700],
+                            color: theme.colorScheme.onSurface,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -141,7 +153,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 14,
-                            color: Colors.grey[600],
+                            color: theme.textTheme.bodySmall?.color,
                           ),
                         ),
                       ],
@@ -151,10 +163,10 @@ class _NotificationsPageState extends State<NotificationsPage> {
               : Column(
                   children: [
                     Expanded(
-                      child: ListView.separated(
+                      child:ListView.separated(
                         padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
                         itemCount: items.length,
-                        separatorBuilder: (context, index) => const Divider(height: 18),
+                        separatorBuilder: (context, index) => const SizedBox(height: 10),
                         itemBuilder: (context, index) {
                           final n = items[index];
                           return _NotificationRow(
@@ -169,9 +181,12 @@ class _NotificationsPageState extends State<NotificationsPage> {
                     ),
                     TextButton(
                       onPressed: _clearAll,
-                      child: const Text(
+                      child: Text(
                         'Clear All',
-                        style: TextStyle(fontWeight: FontWeight.w700),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: theme.colorScheme.primary,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -198,48 +213,73 @@ class _NotificationRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Icon(Icons.info_outline, size: 20),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                  Text(
-                    timeText,
-                    style: const TextStyle(fontSize: 12, color: Color(0xFF6F6F6F)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: const TextStyle(fontSize: 12, color: Color(0xFF6F6F6F)),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                detail,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: urgent ? const Color(0xFFC62828) : const Color(0xFF2F5CE5),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: theme.dividerColor.withOpacity(0.4),
         ),
-      ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.info_outline,
+            size: 20,
+            color: theme.colorScheme.onSurface,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      timeText,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.textTheme.bodySmall?.color,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: theme.textTheme.bodySmall?.color,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  detail,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: urgent ? const Color(0xFFC62828) : const Color(0xFF2F5CE5),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
-

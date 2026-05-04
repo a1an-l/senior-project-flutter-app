@@ -1,3 +1,4 @@
+import '../main.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
@@ -12,7 +13,7 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   bool _notificationsEnabled = false;
-  bool _darkMapEnabled = false;
+  bool _darkModeEnabled = false;
 
   String _locationPermissionStatus = 'Checking...';
   String _notificationPermissionStatus = 'Checking...';
@@ -30,7 +31,7 @@ class _SettingsPageState extends State<SettingsPage> {
     if (!mounted) return;
     setState(() {
       _notificationsEnabled = prefs.getBool('notifications_enabled') ?? true;
-      _darkMapEnabled = prefs.getBool('dark_map_enabled') ?? false;
+      _darkModeEnabled = prefs.getBool('dark_mode') ?? false;
     });
   }
 
@@ -78,20 +79,17 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
-  Future<void> _toggleDarkMap(bool value) async {
+  Future<void> _toggleDarkMode(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('dark_map_enabled', value);
+    await prefs.setBool('dark_mode', value);
 
     if (!mounted) return;
+
     setState(() {
-      _darkMapEnabled = value;
+      _darkModeEnabled = value;
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Map theme preference saved.'),
-      ),
-    );
+    await MyApp.of(context)?.setDarkMode(value);
   }
 
   Future<void> _openAppSettings() async {
@@ -99,28 +97,37 @@ class _SettingsPageState extends State<SettingsPage> {
     await _loadPermissionStatuses();
   }
 
-  Widget _buildSectionTitle(String title) {
+  Widget _buildSectionTitle(BuildContext context, String title) {
+    final theme = Theme.of(context);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 8, 4, 10),
       child: Text(
         title,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w700,
-          color: Colors.black54,
+          color: theme.textTheme.bodySmall?.color,
         ),
       ),
     );
   }
 
-  Widget _buildCard({required List<Widget> children}) {
+  Widget _buildCard(BuildContext context, {required List<Widget> children}) {
+    final theme = Theme.of(context);
+
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: theme.dividerColor.withOpacity(0.4),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withOpacity(
+              theme.brightness == Brightness.dark ? 0.18 : 0.04,
+            ),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -130,27 +137,32 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildDivider() {
+  Widget _buildDivider(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Divider(
       height: 1,
       indent: 16,
       endIndent: 16,
-      color: Colors.grey.shade200,
+      color: theme.dividerColor,
     );
   }
 
   Widget _buildSwitchRow({
+    required BuildContext context,
     required IconData icon,
     required String title,
     required String subtitle,
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
+    final theme = Theme.of(context);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Row(
         children: [
-          Icon(icon, color: const Color(0xFF1A6FD4)),
+          Icon(icon, color: theme.colorScheme.primary),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -158,17 +170,18 @@ class _SettingsPageState extends State<SettingsPage> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: Colors.black45,
+                    color: theme.textTheme.bodySmall?.color,
                   ),
                 ),
               ],
@@ -184,11 +197,14 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _buildPermissionRow({
+    required BuildContext context,
     required IconData icon,
     required String title,
     required String subtitle,
     required String status,
   }) {
+    final theme = Theme.of(context);
+
     return InkWell(
       onTap: _openAppSettings,
       borderRadius: BorderRadius.circular(16),
@@ -196,7 +212,7 @@ class _SettingsPageState extends State<SettingsPage> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
-            Icon(icon, color: const Color(0xFF1A6FD4)),
+            Icon(icon, color: theme.colorScheme.primary),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -204,17 +220,18 @@ class _SettingsPageState extends State<SettingsPage> {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
+                      color: theme.colorScheme.onSurface,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: Colors.black45,
+                      color: theme.textTheme.bodySmall?.color,
                     ),
                   ),
                 ],
@@ -225,14 +242,17 @@ class _SettingsPageState extends State<SettingsPage> {
               children: [
                 Text(
                   status,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF1A6FD4),
+                    color: theme.colorScheme.primary,
                   ),
                 ),
                 const SizedBox(height: 4),
-                const Icon(Icons.chevron_right, color: Colors.black38),
+                Icon(
+                  Icons.chevron_right,
+                  color: theme.textTheme.bodySmall?.color,
+                ),
               ],
             ),
           ],
@@ -242,15 +262,18 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _buildInfoRow({
+    required BuildContext context,
     required IconData icon,
     required String title,
     required String subtitle,
   }) {
+    final theme = Theme.of(context);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Row(
         children: [
-          Icon(icon, color: const Color(0xFF1A6FD4)),
+          Icon(icon, color: theme.colorScheme.primary),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -258,17 +281,18 @@ class _SettingsPageState extends State<SettingsPage> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: Colors.black45,
+                    color: theme.textTheme.bodySmall?.color,
                   ),
                 ),
               ],
@@ -281,11 +305,13 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1A6FD4),
-        foregroundColor: Colors.white,
+        backgroundColor: theme.appBarTheme.backgroundColor,
+        foregroundColor: theme.appBarTheme.foregroundColor,
         title: const Text(
           'Settings',
           style: TextStyle(fontWeight: FontWeight.bold),
@@ -294,10 +320,12 @@ class _SettingsPageState extends State<SettingsPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _buildSectionTitle('Notifications'),
+          _buildSectionTitle(context, 'Notifications'),
           _buildCard(
+            context,
             children: [
               _buildSwitchRow(
+                context: context,
                 icon: Icons.notifications_outlined,
                 title: 'Enable Notifications',
                 subtitle: 'Turn traffic and route alerts on or off',
@@ -307,17 +335,20 @@ class _SettingsPageState extends State<SettingsPage> {
             ],
           ),
           const SizedBox(height: 18),
-          _buildSectionTitle('Permissions'),
+          _buildSectionTitle(context, 'Permissions'),
           _buildCard(
+            context,
             children: [
               _buildPermissionRow(
+                context: context,
                 icon: Icons.location_on_outlined,
                 title: 'Location Permission',
                 subtitle: 'Manage location access for traffic monitoring',
                 status: _locationPermissionStatus,
               ),
-              _buildDivider(),
+              _buildDivider(context),
               _buildPermissionRow(
+                context: context,
                 icon: Icons.notifications_active_outlined,
                 title: 'Notification Permission',
                 subtitle: 'Manage push and local notification access',
@@ -326,23 +357,27 @@ class _SettingsPageState extends State<SettingsPage> {
             ],
           ),
           const SizedBox(height: 18),
-          _buildSectionTitle('Map'),
+          _buildSectionTitle(context, 'Appearance'),
           _buildCard(
+            context,
             children: [
               _buildSwitchRow(
-                icon: Icons.map_outlined,
-                title: 'Dark Map Mode',
-                subtitle: 'Use a darker map style when available',
-                value: _darkMapEnabled,
-                onChanged: _toggleDarkMap,
+                context: context,
+                icon: Icons.dark_mode_outlined,
+                title: 'Dark Mode',
+                subtitle: 'Use dark theme throughout the app',
+                value: _darkModeEnabled,
+                onChanged: _toggleDarkMode,
               ),
             ],
           ),
           const SizedBox(height: 18),
-          _buildSectionTitle('About'),
+          _buildSectionTitle(context, 'About'),
           _buildCard(
+            context,
             children: [
               _buildInfoRow(
+                context: context,
                 icon: Icons.info_outline,
                 title: 'HiWay',
                 subtitle: 'Traffic alerts, saved routes, and smarter commuting',

@@ -65,16 +65,13 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
         throw Exception('No authenticated user email found.');
       }
 
-      // Hash password
       final hashedPassword =
           sha256.convert(utf8.encode(newPassword)).toString();
 
-      // Update Supabase Auth
       await client.auth.updateUser(
         UserAttributes(password: hashedPassword),
       );
 
-      // Update custom users table
       await client
           .from('users')
           .update({'password': hashedPassword}).eq('email', userEmail);
@@ -104,23 +101,39 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
   }
 
   Widget _buildPasswordField({
+    required BuildContext context,
     required TextEditingController controller,
     required String label,
   }) {
+    final theme = Theme.of(context);
+
     return TextField(
       controller: controller,
       obscureText: true,
+      style: TextStyle(color: theme.colorScheme.onSurface),
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: const Icon(Icons.lock_outline),
+        labelStyle: TextStyle(color: theme.textTheme.bodyMedium?.color),
+        prefixIcon: Icon(
+          Icons.lock_outline,
+          color: theme.colorScheme.primary,
+        ),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: theme.cardColor,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
+          borderSide: BorderSide(color: theme.dividerColor),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: theme.colorScheme.primary,
+            width: 1.5,
+          ),
         ),
       ),
     );
@@ -128,12 +141,16 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Reset Password'),
-        backgroundColor: const Color(0xFF1A6FD4),
-        foregroundColor: Colors.white,
+        backgroundColor:
+            theme.appBarTheme.backgroundColor ?? theme.colorScheme.primary,
+        foregroundColor:
+            theme.appBarTheme.foregroundColor ?? Colors.white,
       ),
       body: SafeArea(
         child: Padding(
@@ -142,20 +159,22 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 'Enter your new password below.',
                 style: TextStyle(
                   fontSize: 16,
-                  color: Colors.black87,
+                  color: theme.colorScheme.onSurface,
                 ),
               ),
               const SizedBox(height: 24),
               _buildPasswordField(
+                context: context,
                 controller: _newPasswordController,
                 label: 'New Password',
               ),
               const SizedBox(height: 16),
               _buildPasswordField(
+                context: context,
                 controller: _confirmPasswordController,
                 label: 'Confirm Password',
               ),
@@ -172,7 +191,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
               ElevatedButton(
                 onPressed: _isLoading ? null : _handleResetPassword,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1A6FD4),
+                  backgroundColor: theme.colorScheme.primary,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(

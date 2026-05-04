@@ -2,19 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'my_addresses.dart';
-import 'edit_profile_page.dart'; 
+import 'edit_profile_page.dart';
 import 'settings_page.dart';
 
 class AppDrawer extends StatefulWidget {
-  const AppDrawer({super.key,
-  required this.onOpenTrafficSettings,
-  required this.onSettingsClosed,
-});
+  const AppDrawer({
+    super.key,
+    required this.onOpenTrafficSettings,
+    required this.onSettingsClosed,
+  });
 
   final VoidCallback onOpenTrafficSettings;
   final Future<void> Function() onSettingsClosed;
-
- 
 
   @override
   State<AppDrawer> createState() => _AppDrawerState();
@@ -31,14 +30,12 @@ class _AppDrawerState extends State<AppDrawer> {
   }
 
   Future<void> loadUsername() async {
-    //debugPrint('here');
-
     try {
       final prefs = await SharedPreferences.getInstance();
       final int? userId = prefs.getInt('user_id');
 
       debugPrint('user id: $userId');
-      //if user is signed out dipslay guest
+
       if (userId == null) {
         setState(() {
           username = 'Guest!';
@@ -76,56 +73,63 @@ class _AppDrawerState extends State<AppDrawer> {
       });
     }
   }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: Column(
         children: [
-          // Blue header
           Container(
             width: double.infinity,
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF1A6FD4),
-                  Color(0xFF2196F3),
-                ],
+            decoration: BoxDecoration(
+            color: theme.brightness == Brightness.dark ? theme.cardColor: const Color(0xFF1A6FD4),
+              border: Border(
+                bottom: BorderSide(
+                  color: theme.brightness == Brightness.dark
+                      ? theme.dividerColor.withOpacity(0.4)
+                      : Colors.transparent,
+                ),
               ),
             ),
             padding: const EdgeInsets.only(top: 60, bottom: 32),
             child: Column(
               children: [
-                // Close button top right
                 Align(
                   alignment: Alignment.centerRight,
                   child: Padding(
                     padding: const EdgeInsets.only(right: 12),
                     child: IconButton(
-                      icon: const Icon(Icons.chevron_right, color: Colors.white, size: 28),
+                      icon: Icon(
+                        Icons.chevron_right,
+                        color: theme.brightness == Brightness.dark ? theme.colorScheme.onSurface : Colors.white,
+                        size: 28,
+                      ),
                       onPressed: () => Navigator.pop(context),
                     ),
                   ),
                 ),
-                // Avatar
                 CircleAvatar(
-                    radius: 40,
-                    backgroundColor: Colors.white,
-                    backgroundImage: photoUrl != null ? NetworkImage(photoUrl!) : null,
-                    child: photoUrl == null
-                        ? const Icon(
-                            Icons.person,
-                            size: 40,
-                            color: Color(0xFF1A6FD4),
-                          )
-                        : null,
-                  ),
+                  radius: 40,
+                  backgroundColor: Theme.of(context).brightness == Brightness.dark
+                      ? const Color(0xFF2A2A2A)
+                      : Colors.white,
+                  backgroundImage: photoUrl != null ? NetworkImage(photoUrl!) : null,
+                  child: photoUrl == null
+                      ? Icon(
+                          Icons.person,
+                          size: 40,
+                          color: Theme.of(context).colorScheme.primary,
+                        )
+                      : null,
+                ),
                 const SizedBox(height: 14),
                 Text(
-                  username.isEmpty ? 'Hi!' : 'Hi $username!', //defualt to Hi if not signed in
+                  username.isEmpty ? 'Hi!' : 'Hi $username!',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: theme.brightness == Brightness.dark ? theme.colorScheme.onSurface : Colors.white,
                     fontSize: 28,
                     fontWeight: FontWeight.w800,
                   ),
@@ -134,69 +138,69 @@ class _AppDrawerState extends State<AppDrawer> {
             ),
           ),
 
-          // Menu items
           Expanded(
             child: Container(
-              color: const Color(0xFFF2F2F7),
+              color: theme.scaffoldBackgroundColor,
               child: Column(
                 children: [
                   const SizedBox(height: 8),
-                 _DrawerItem(
-                  icon: Icons.person_outline,
-                  label: 'Profile',
-                  subtitle: 'View and Edit your profile',
-                  onTap: () async {
-                    try {
-                      final prefs = await SharedPreferences.getInstance();
-                      final int? userId = prefs.getInt('user_id');
+                  _DrawerItem(
+                    icon: Icons.person_outline,
+                    label: 'Profile',
+                    subtitle: 'View and Edit your profile',
+                    onTap: () async {
+                      try {
+                        final prefs = await SharedPreferences.getInstance();
+                        final int? userId = prefs.getInt('user_id');
 
-                      if (userId == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Please sign in to view your profile.')),
-                        );
-                        return;
-                      }
+                        if (userId == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content:
+                                  Text('Please sign in to view your profile.'),
+                            ),
+                          );
+                          return;
+                        }
 
-                      final supabase = Supabase.instance.client;
+                        final supabase = Supabase.instance.client;
 
-                      // Reuse the same query pattern as loadUsername(), just grab email too
-                      final data = await supabase
-                          .from('users')
-                          .select('username, email')
-                          .eq('user_id', userId)
-                          .maybeSingle();
+                        final data = await supabase
+                            .from('users')
+                            .select('username, email')
+                            .eq('user_id', userId)
+                            .maybeSingle();
 
-                      if (data == null || !mounted) return;
+                        if (data == null || !mounted) return;
 
-                      final updated = await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => EditProfilePage(
-                            userId: userId,
-                            currentUsername: data['username'] ?? '',
-                            currentEmail: data['email'] ?? '',
+                        final updated = await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => EditProfilePage(
+                              userId: userId,
+                              currentUsername: data['username'] ?? '',
+                              currentEmail: data['email'] ?? '',
+                            ),
                           ),
-                        ),
-                      );
-
-                      if (updated == true && mounted) {
-                        await loadUsername();
-                      }
-                    } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Failed to load profile: $e')),
                         );
+
+                        if (updated == true && mounted) {
+                          await loadUsername();
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Failed to load profile: $e')),
+                          );
+                        }
                       }
-                    }
-                  },
-                ),
+                    },
+                  ),
                   _DrawerItem(
                     icon: Icons.route_outlined,
                     label: 'My Addresses',
                     subtitle: 'View your saved addresses',
                     onTap: () {
-                     
                       Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -209,15 +213,15 @@ class _AppDrawerState extends State<AppDrawer> {
                     icon: Icons.settings_outlined,
                     label: 'Settings',
                     subtitle: 'View settings',
-                    onTap: () async {  
+                    onTap: () async {
                       await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const SettingsPage(),
-                      ),
-                    );
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const SettingsPage(),
+                        ),
+                      );
 
-                    await widget.onSettingsClosed();
+                      await widget.onSettingsClosed();
                     },
                   ),
                   _DrawerItem(
@@ -225,14 +229,13 @@ class _AppDrawerState extends State<AppDrawer> {
                     label: 'Radius Traffic Detection',
                     subtitle: 'Monitor traffic around you',
                     onTap: () {
-                      
                       widget.onOpenTrafficSettings();
                     },
                   ),
                 ],
               ),
             ),
-          ),  
+          ),
         ],
       ),
     );
@@ -254,18 +257,25 @@ class _DrawerItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withOpacity(
+              theme.brightness == Brightness.dark ? 0.18 : 0.05,
+            ),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ],
+        border: Border.all(
+          color: theme.dividerColor.withOpacity(0.4),
+        ),
       ),
       child: InkWell(
         onTap: onTap,
@@ -274,7 +284,11 @@ class _DrawerItem extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
           child: Row(
             children: [
-              Icon(icon, size: 22, color: Colors.black87),
+              Icon(
+                icon,
+                size: 22,
+                color: theme.colorScheme.onSurface,
+              ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -282,24 +296,28 @@ class _DrawerItem extends StatelessWidget {
                   children: [
                     Text(
                       label,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
-                        color: Colors.black87,
+                        color: theme.colorScheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: Colors.black45,
+                        color: theme.textTheme.bodySmall?.color,
                       ),
                     ),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: Colors.black38, size: 20),
+              Icon(
+                Icons.chevron_right,
+                color: theme.textTheme.bodySmall?.color,
+                size: 20,
+              ),
             ],
           ),
         ),

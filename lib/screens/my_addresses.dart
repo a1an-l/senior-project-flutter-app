@@ -41,10 +41,10 @@ class _MyAddressesPageState extends State<MyAddresses> {
         return;
       }
 
-      // Fetch Addresses
-      final addressData = await supabase.from('addressDB').select().eq('user_id', userId);
-      // Fetch Tracked Routes
-      final routeData = await supabase.from('routedb').select().eq('user_id', userId);
+      final addressData =
+          await supabase.from('addressDB').select().eq('user_id', userId);
+      final routeData =
+          await supabase.from('routedb').select().eq('user_id', userId);
 
       List<Map<String, dynamic>> combined = [];
 
@@ -60,7 +60,9 @@ class _MyAddressesPageState extends State<MyAddresses> {
 
       for (var row in routeData) {
         final routeName = row['route_name'];
-        final label = (routeName != null && routeName.toString().trim().isNotEmpty) ? routeName.toString() : 'Personal Route';
+        final label = (routeName != null && routeName.toString().trim().isNotEmpty)
+            ? routeName.toString()
+            : 'Personal Route';
 
         combined.add({
           'id': row['route_id'],
@@ -71,11 +73,12 @@ class _MyAddressesPageState extends State<MyAddresses> {
         });
       }
 
-      // Sort both combined lists by date created
       combined.sort((a, b) {
-        final dateA = DateTime.tryParse(a['created_at'] ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
-        final dateB = DateTime.tryParse(b['created_at'] ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
-        return dateA.compareTo(dateB); // Oldest first
+        final dateA = DateTime.tryParse(a['created_at'] ?? '') ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        final dateB = DateTime.tryParse(b['created_at'] ?? '') ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        return dateA.compareTo(dateB);
       });
 
       setState(() {
@@ -96,7 +99,9 @@ class _MyAddressesPageState extends State<MyAddresses> {
       _routeConfigs = existingConfigs;
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load locations: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load locations: $e')),
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -111,15 +116,20 @@ class _MyAddressesPageState extends State<MyAddresses> {
       }
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Item deleted')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Item deleted')),
+      );
       await _loadLocations();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to delete: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete: $e')),
+      );
     }
   }
 
   Future<void> _showEditDialog(Map<String, dynamic> row) async {
+    final theme = Theme.of(context);
     final isRoute = row['type'] == 'route';
     final labelController = TextEditingController(text: row['label'] ?? '');
     final addressController = TextEditingController(text: row['address'] ?? '');
@@ -127,29 +137,45 @@ class _MyAddressesPageState extends State<MyAddresses> {
     await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(isRoute ? 'Edit Route Name' : 'Edit Address'),
+        backgroundColor: theme.cardColor,
+        title: Text(
+          isRoute ? 'Edit Route Name' : 'Edit Address',
+          style: TextStyle(color: theme.colorScheme.onSurface),
+        ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: labelController,
-                decoration: InputDecoration(labelText: isRoute ? 'Route Name' : 'Label'),
+                style: TextStyle(color: theme.colorScheme.onSurface),
+                decoration: InputDecoration(
+                  labelText: isRoute ? 'Route Name' : 'Label',
+                  labelStyle: TextStyle(color: theme.textTheme.bodyMedium?.color),
+                ),
               ),
               if (!isRoute) ...[
                 const SizedBox(height: 12),
                 TextField(
                   controller: addressController,
-                  decoration: const InputDecoration(labelText: 'Address'),
+                  style: TextStyle(color: theme.colorScheme.onSurface),
+                  decoration: InputDecoration(
+                    labelText: 'Address',
+                    labelStyle:
+                        TextStyle(color: theme.textTheme.bodyMedium?.color),
+                  ),
                 ),
-              ]
+              ],
             ],
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: theme.colorScheme.primary),
+            ),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -160,18 +186,27 @@ class _MyAddressesPageState extends State<MyAddresses> {
 
               try {
                 if (isRoute) {
-                  await supabase.from('routedb').update({'route_name': newLabel}).eq('route_id', row['id']);
+                  await supabase
+                      .from('routedb')
+                      .update({'route_name': newLabel}).eq('route_id', row['id']);
                 } else {
-                  await supabase.from('addressDB').update({'label': newLabel, 'address': newAddress}).eq('address_id', row['id']);
+                  await supabase.from('addressDB').update({
+                    'label': newLabel,
+                    'address': newAddress,
+                  }).eq('address_id', row['id']);
                 }
 
                 if (!mounted) return;
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Updated successfully')));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Updated successfully')),
+                );
                 await _loadLocations();
               } catch (e) {
                 if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Update failed: $e')));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Update failed: $e')),
+                );
               }
             },
             child: const Text('Save'),
@@ -184,10 +219,14 @@ class _MyAddressesPageState extends State<MyAddresses> {
   void _showAddressMenu(Map<String, dynamic> row, Offset position) async {
     final selected = await showMenu<String>(
       context: context,
-      position: RelativeRect.fromLTRB(position.dx, position.dy, position.dx, position.dy),
+      position:
+          RelativeRect.fromLTRB(position.dx, position.dy, position.dx, position.dy),
       items: const [
         PopupMenuItem(value: 'edit', child: Text('Edit')),
-        PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
+        PopupMenuItem(
+          value: 'delete',
+          child: Text('Delete', style: TextStyle(color: Colors.red)),
+        ),
       ],
     );
 
@@ -202,34 +241,52 @@ class _MyAddressesPageState extends State<MyAddresses> {
     if (type == 'route') return Icons.route;
 
     switch (label.toLowerCase()) {
-      case 'home': return Icons.home_rounded;
-      case 'work': return Icons.work_rounded;
-      case 'school': return Icons.edit_rounded;
-      case 'gym': return Icons.fitness_center_rounded;
-      default: return Icons.location_on_rounded;
+      case 'home':
+        return Icons.home_rounded;
+      case 'work':
+        return Icons.work_rounded;
+      case 'school':
+        return Icons.edit_rounded;
+      case 'gym':
+        return Icons.fitness_center_rounded;
+      default:
+        return Icons.location_on_rounded;
     }
   }
 
   Color _iconColorForLabel(String label, String type) {
-    if (type == 'route') return const Color(0xFF673AB7); // Distinct purple color for custom routes
+    if (type == 'route') return const Color(0xFF673AB7);
 
     switch (label.toLowerCase()) {
-      case 'home': return const Color(0xFFE53935);
-      case 'work': return const Color(0xFF1A3ED4);
-      case 'school': return const Color(0xFFD4860A);
-      case 'gym': return const Color(0xFF1FCC00);
-      default: return const Color(0xFF00BCD4);
+      case 'home':
+        return const Color(0xFFE53935);
+      case 'work':
+        return const Color(0xFF1A3ED4);
+      case 'school':
+        return const Color(0xFFD4860A);
+      case 'gym':
+        return const Color(0xFF1FCC00);
+      default:
+        return const Color(0xFF00BCD4);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1A6FD4),
-        foregroundColor: Colors.white,
-        title: const Text('My Locations', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor:
+            theme.appBarTheme.backgroundColor ?? theme.colorScheme.primary,
+        foregroundColor:
+            theme.appBarTheme.foregroundColor ?? Colors.white,
+        title: const Text(
+          'My Locations',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
       ),
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.all(16),
@@ -243,166 +300,311 @@ class _MyAddressesPageState extends State<MyAddresses> {
           icon: const Icon(Icons.add_location_alt_outlined),
           label: const Text('Add Address'),
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF1A6FD4),
+            backgroundColor: theme.colorScheme.primary,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
           ),
         ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+              child: CircularProgressIndicator(
+                color: theme.colorScheme.primary,
+              ),
+            )
           : _savedLocations.isEmpty
-          ? const Center(child: Text('No saved locations yet.', style: TextStyle(fontSize: 16)))
-          : ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _savedLocations.length,
-        itemBuilder: (context, index) {
-          final row = _savedLocations[index];
-          final label = (row['label'] ?? '').toString();
-          final type = row['type'];
-
-          return Container(
-            margin: const EdgeInsets.only(bottom: 14),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 3))],
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(color: _iconColorForLabel(label, type), shape: BoxShape.circle),
-                    child: Icon(_iconForLabel(label, type), color: Colors.white, size: 26),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        const SizedBox(height: 6),
-                        Text(row['address'] ?? '', style: const TextStyle(fontSize: 13, color: Colors.black87)),
-                        const SizedBox(height: 10),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: ElevatedButton.icon(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => AddressAlarmsPage(
-                                    addressId: type == 'address' ? row['id'] : null,
-                                    routeId: type == 'route' ? row['id'] : null,
-                                    addressLabel: label,
-                                  ),
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.alarm_add, size: 16),
-                            label: const Text('Set Time'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFF2F6FF),
-                              foregroundColor: const Color(0xFF1A6FD4),
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                            ),
-                          ),
-                        ),
-                      ],
+              ? Center(
+                  child: Text(
+                    'No saved locations yet.',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: theme.textTheme.bodyMedium?.color,
                     ),
                   ),
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Switch(
-                        value: _routeConfigs[label]?.enabled ?? false,
-                        onChanged: (value) async {
-                          final current = _routeConfigs[label] ?? RouteMonitorConfig.defaultConfig();
-                          final updated = RouteMonitorConfig(
-                            enabled: value,
-                            startHour: current.startHour,
-                            startMinute: current.startMinute,
-                            endHour: current.endHour,
-                            endMinute: current.endMinute,
-                            autoResetBaseline: current.autoResetBaseline,
-                            autoResetIntervalMinutes: current.autoResetIntervalMinutes,
-                            lastResetAtMs: current.lastResetAtMs,
-                          );
-                          await RouteMonitorStore.save(label, updated);
-                          setState(() => _routeConfigs[label] = updated);
-                          await RouteTrafficService.refreshMonitoring();
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _savedLocations.length,
+                  itemBuilder: (context, index) {
+                    final row = _savedLocations[index];
+                    final label = (row['label'] ?? '').toString();
+                    final type = row['type'];
 
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(value ? 'Alerts enabled for $label' : 'Alerts disabled for $label')));
-                        },
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 14),
+                      decoration: BoxDecoration(
+                        color: theme.cardColor,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: theme.dividerColor.withOpacity(0.4),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(
+                              isDark ? 0.18 : 0.05,
+                            ),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(_routeConfigs[label]?.enabled == true ? 'Alerts: On' : 'Alerts: Off', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
-                    ],
-                  ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.play_arrow),
-                        tooltip: 'Test route alerts',
-                        onPressed: () async {
-                          final snack = ScaffoldMessenger.of(context);
-                          snack.showSnackBar(const SnackBar(content: Text('Testing route...')));
-                          final result = await RouteTrafficService.testRoute(label);
-                          final message = result['message']?.toString() ?? 'Test complete';
-                          if (mounted) {
-                            snack.hideCurrentSnackBar();
-                            if (message.toLowerCase().contains('no historical average')) {
-                              final confirm = await showDialog<bool>(
-                                context: context,
-                                builder: (ctx) => AlertDialog(
-                                  title: const Text('No baseline'),
-                                  content: Text('$message\n\nWould you like to seed a baseline using your current travel time?'),
-                                  actions: [
-                                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                                    ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Seed baseline')),
-                                  ],
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 52,
+                              height: 52,
+                              decoration: BoxDecoration(
+                                color: _iconColorForLabel(label, type),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                _iconForLabel(label, type),
+                                color: Colors.white,
+                                size: 26,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    label,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      color: theme.colorScheme.onSurface,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    row['address'] ?? '',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: theme.colorScheme.onSurface,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: ElevatedButton.icon(
+                                      onPressed: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => AddressAlarmsPage(
+                                              addressId: type == 'address'
+                                                  ? row['id']
+                                                  : null,
+                                              routeId: type == 'route'
+                                                  ? row['id']
+                                                  : null,
+                                              addressLabel: label,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                      icon: const Icon(Icons.alarm_add, size: 16),
+                                      label: const Text('Set Time'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: isDark
+                                            ? const Color(0xFF1F2A44)
+                                            : const Color(0xFFF2F6FF),
+                                        foregroundColor:
+                                            const Color(0xFF1A6FD4),
+                                        elevation: 0,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 14,
+                                          vertical: 8,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(20),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Switch(
+                                  value: _routeConfigs[label]?.enabled ?? false,
+                                  onChanged: (value) async {
+                                    final current = _routeConfigs[label] ??
+                                        RouteMonitorConfig.defaultConfig();
+                                    final updated = RouteMonitorConfig(
+                                      enabled: value,
+                                      startHour: current.startHour,
+                                      startMinute: current.startMinute,
+                                      endHour: current.endHour,
+                                      endMinute: current.endMinute,
+                                      autoResetBaseline:
+                                          current.autoResetBaseline,
+                                      autoResetIntervalMinutes:
+                                          current.autoResetIntervalMinutes,
+                                      lastResetAtMs: current.lastResetAtMs,
+                                    );
+                                    await RouteMonitorStore.save(label, updated);
+                                    setState(() => _routeConfigs[label] = updated);
+                                    await RouteTrafficService.refreshMonitoring();
+
+                                    if (!mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          value
+                                              ? 'Alerts enabled for $label'
+                                              : 'Alerts disabled for $label',
+                                        ),
+                                      ),
+                                    );
+                                  },
                                 ),
-                              );
-                              if (confirm == true) {
-                                snack.showSnackBar(const SnackBar(content: Text('Seeding baseline...')));
-                                final seedRes = await RouteTrafficService.seedBaseline(label);
-                                final seedMsg = seedRes['message']?.toString() ?? 'Seed complete';
-                                if (mounted) {
-                                  snack.hideCurrentSnackBar();
-                                  snack.showSnackBar(SnackBar(content: Text(seedMsg)));
-                                  await _loadLocations();
-                                }
-                              }
-                            } else {
-                              snack.showSnackBar(SnackBar(content: Text(message)));
-                            }
-                          }
-                        },
+                                const SizedBox(height: 4),
+                                Text(
+                                  _routeConfigs[label]?.enabled == true
+                                      ? 'Alerts: On'
+                                      : 'Alerts: Off',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: theme.textTheme.bodySmall?.color,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.play_arrow,
+                                    color: theme.colorScheme.onSurface,
+                                  ),
+                                  tooltip: 'Test route alerts',
+                                  onPressed: () async {
+                                    final snack = ScaffoldMessenger.of(context);
+                                    snack.showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Testing route...'),
+                                      ),
+                                    );
+                                    final result =
+                                        await RouteTrafficService.testRoute(label);
+                                    final message = result['message']
+                                            ?.toString() ??
+                                        'Test complete';
+                                    if (mounted) {
+                                      snack.hideCurrentSnackBar();
+                                      if (message
+                                          .toLowerCase()
+                                          .contains('no historical average')) {
+                                        final confirm = await showDialog<bool>(
+                                          context: context,
+                                          builder: (ctx) => AlertDialog(
+                                            backgroundColor: theme.cardColor,
+                                            title: Text(
+                                              'No baseline',
+                                              style: TextStyle(
+                                                color: theme
+                                                    .colorScheme.onSurface,
+                                              ),
+                                            ),
+                                            content: Text(
+                                              '$message\n\nWould you like to seed a baseline using your current travel time?',
+                                              style: TextStyle(
+                                                color: theme
+                                                    .colorScheme.onSurface,
+                                              ),
+                                            ),
+                                            actions: [
+                                              TextButton(
+                                                onPressed: () =>
+                                                    Navigator.pop(ctx, false),
+                                                child: Text(
+                                                  'Cancel',
+                                                  style: TextStyle(
+                                                    color: theme
+                                                        .colorScheme.primary,
+                                                  ),
+                                                ),
+                                              ),
+                                              ElevatedButton(
+                                                onPressed: () =>
+                                                    Navigator.pop(ctx, true),
+                                                child: const Text(
+                                                    'Seed baseline'),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                        if (confirm == true) {
+                                          snack.showSnackBar(
+                                            const SnackBar(
+                                              content:
+                                                  Text('Seeding baseline...'),
+                                            ),
+                                          );
+                                          final seedRes =
+                                              await RouteTrafficService
+                                                  .seedBaseline(label);
+                                          final seedMsg = seedRes['message']
+                                                  ?.toString() ??
+                                              'Seed complete';
+                                          if (mounted) {
+                                            snack.hideCurrentSnackBar();
+                                            snack.showSnackBar(
+                                              SnackBar(
+                                                content: Text(seedMsg),
+                                              ),
+                                            );
+                                            await _loadLocations();
+                                          }
+                                        }
+                                      } else {
+                                        snack.showSnackBar(
+                                          SnackBar(content: Text(message)),
+                                        );
+                                      }
+                                    }
+                                  },
+                                ),
+                                GestureDetector(
+                                  onTapDown: (details) {
+                                    _showAddressMenu(
+                                      row,
+                                      details.globalPosition,
+                                    );
+                                  },
+                                  child: Padding(
+                                    padding:
+                                        const EdgeInsets.only(left: 8, top: 4),
+                                    child: Icon(
+                                      Icons.more_horiz,
+                                      color: theme.colorScheme.onSurface,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
-                      GestureDetector(
-                        onTapDown: (details) {
-                          _showAddressMenu(row, details.globalPosition);
-                        },
-                        child: const Padding(padding: EdgeInsets.only(left: 8, top: 4), child: Icon(Icons.more_horiz)),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
+                    );
+                  },
+                ),
     );
   }
 }

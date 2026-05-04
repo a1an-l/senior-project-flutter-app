@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'landing_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-
 class EditProfilePage extends StatefulWidget {
   final int userId;
   final String currentUsername;
@@ -28,9 +27,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
   final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
 
-
-  File? _pickedImageFile;       // newly picked local file
-  String? _currentPhotoUrl;    // loaded from Supabase
+  File? _pickedImageFile;
+  String? _currentPhotoUrl;
   bool _isLoading = false;
   bool _isPhotoLoading = false;
 
@@ -48,61 +46,62 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _emailController.dispose();
     super.dispose();
   }
-Future<void> _onSubmit() async {
-  final username = _usernameController.text.trim();
-  final email = _emailController.text.trim();
 
-  if (username.isEmpty || email.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Username and email cannot be empty.')),
-    );
-    return;
-  }
+  Future<void> _onSubmit() async {
+    final username = _usernameController.text.trim();
+    final email = _emailController.text.trim();
 
-  setState(() {
-    _isLoading = true;
-  });
-
-  try {
-    await _profileService.updateProfile(
-      userId: widget.userId,
-      username: username,
-      email: email,
-    );
-
-    if (mounted) {
-      Navigator.pop(context, true);
-    }
-  } catch (e) {
-    debugPrint('update profile error: $e');
-
-    if (mounted) {
+    if (username.isEmpty || email.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to update profile.')),
+        const SnackBar(content: Text('Username and email cannot be empty.')),
       );
+      return;
     }
-  } finally {
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      await _profileService.updateProfile(
+        userId: widget.userId,
+        username: username,
+        email: email,
+      );
+
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      debugPrint('update profile error: $e');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to update profile.')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
-}
+
   Future<void> _loadCurrentPhoto() async {
     setState(() => _isPhotoLoading = true);
     try {
       final url = await _profileService.getProfilePhotoUrl(widget.userId);
       if (mounted) setState(() => _currentPhotoUrl = url);
     } catch (_) {
-      // No photo yet 
+      // no photo yet
     } finally {
       if (mounted) setState(() => _isPhotoLoading = false);
     }
   }
 
   Future<void> _pickAndUploadPhoto() async {
-    // Let user choose source
     final source = await _showImageSourceDialog();
     if (source == null) return;
 
@@ -128,15 +127,18 @@ Future<void> _onSubmit() async {
       _showSnack('Profile picture updated!', isError: false);
     } catch (e) {
       _showSnack('Failed to upload photo: $e');
-      setState(() => _pickedImageFile = null); // revert preview on error
+      setState(() => _pickedImageFile = null);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<ImageSource?> _showImageSourceDialog() {
+    final theme = Theme.of(context);
+
     return showModalBottomSheet<ImageSource>(
       context: context,
+      backgroundColor: theme.cardColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -149,19 +151,25 @@ Future<void> _onSubmit() async {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey[300],
+                color: theme.dividerColor,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
             const SizedBox(height: 12),
             ListTile(
-              leading: const Icon(Icons.camera_alt),
-              title: const Text('Take a photo'),
+              leading: Icon(Icons.camera_alt, color: theme.colorScheme.onSurface),
+              title: Text(
+                'Take a photo',
+                style: TextStyle(color: theme.colorScheme.onSurface),
+              ),
               onTap: () => Navigator.pop(context, ImageSource.camera),
             ),
             ListTile(
-              leading: const Icon(Icons.photo_library),
-              title: const Text('Choose from gallery'),
+              leading: Icon(Icons.photo_library, color: theme.colorScheme.onSurface),
+              title: Text(
+                'Choose from gallery',
+                style: TextStyle(color: theme.colorScheme.onSurface),
+              ),
               onTap: () => Navigator.pop(context, ImageSource.gallery),
             ),
             const SizedBox(height: 8),
@@ -171,82 +179,92 @@ Future<void> _onSubmit() async {
     );
   }
 
-
   Future<void> _sendPasswordResetEmail() async {
-  final email = _emailController.text.trim();
+    final email = _emailController.text.trim();
 
-  if (email.isEmpty) {
-    _showSnack('Email cannot be empty.');
-    return;
-  }
+    if (email.isEmpty) {
+      _showSnack('Email cannot be empty.');
+      return;
+    }
 
-  setState(() => _isLoading = true);
+    setState(() => _isLoading = true);
 
-  try {
-    await _profileService.sendPasswordResetEmail(email);
-    _showSnack('Password reset email sent. Check your inbox.', isError: false);
-  } catch (e) {
-    _showSnack('Failed to send reset email: $e');
-  } finally {
-    if (mounted) {
-      setState(() => _isLoading = false);
+    try {
+      await _profileService.sendPasswordResetEmail(email);
+      _showSnack('Password reset email sent. Check your inbox.', isError: false);
+    } catch (e) {
+      _showSnack('Failed to send reset email: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
-}
 
   Future<void> _handleSignOut() async {
-  setState(() => _isLoading = true);
+    setState(() => _isLoading = true);
 
-  try {
-    await Supabase.instance.client.auth.signOut();
+    try {
+      await Supabase.instance.client.auth.signOut();
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('user_id');
-    await prefs.remove('remember_me');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('user_id');
+      await prefs.remove('remember_me');
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const LandingPage()),
-      (route) => false,
-    );
-  } catch (e) {
-    _showSnack('Failed to sign out: $e');
-  } finally {
-    if (mounted) {
-      setState(() => _isLoading = false);
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LandingPage()),
+        (route) => false,
+      );
+    } catch (e) {
+      _showSnack('Failed to sign out: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
-}
 
-Future<void> _confirmSignOut() async {
-  final shouldSignOut = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Sign Out'),
-      content: const Text('Are you sure you want to sign out?'),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancel'),
+  Future<void> _confirmSignOut() async {
+    final theme = Theme.of(context);
+
+    final shouldSignOut = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: theme.cardColor,
+        title: Text(
+          'Sign Out',
+          style: TextStyle(color: theme.colorScheme.onSurface),
         ),
-        TextButton(
-          onPressed: () => Navigator.pop(context, true),
-          child: const Text(
-            'Sign Out',
-            style: TextStyle(color: Colors.red),
+        content: Text(
+          'Are you sure you want to sign out?',
+          style: TextStyle(color: theme.colorScheme.onSurface),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: theme.colorScheme.primary),
+            ),
           ),
-        ),
-      ],
-    ),
-  );
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'Sign Out',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
+    );
 
-  if (shouldSignOut == true) {
-    await _handleSignOut();
+    if (shouldSignOut == true) {
+      await _handleSignOut();
+    }
   }
-}
-
 
   void _showSnack(String message, {bool isError = true}) {
     if (!mounted) return;
@@ -261,6 +279,7 @@ Future<void> _confirmSignOut() async {
   }
 
   Widget _buildAvatar() {
+    final theme = Theme.of(context);
     ImageProvider? provider;
 
     if (_pickedImageFile != null) {
@@ -274,33 +293,47 @@ Future<void> _confirmSignOut() async {
       children: [
         CircleAvatar(
           radius: 52,
-          backgroundColor: Colors.white24,
+          backgroundColor: theme.brightness == Brightness.dark
+              ? const Color(0xFF2A2A2A)
+              : Colors.white24,
           backgroundImage: provider,
           child: provider == null
-              ? const Icon(Icons.person, size: 52, color: Colors.white)
+              ? Icon(
+                  Icons.person,
+                  size: 52,
+                  color: theme.brightness == Brightness.dark
+                      ? theme.colorScheme.onSurface
+                      : Colors.white,
+                )
               : null,
         ),
         GestureDetector(
           onTap: _isLoading ? null : _pickAndUploadPhoto,
           child: Container(
             padding: const EdgeInsets.all(6),
-            decoration: const BoxDecoration(
-              color: Colors.white,
+            decoration: BoxDecoration(
+              color: theme.cardColor,
               shape: BoxShape.circle,
+              border: Border.all(color: theme.dividerColor.withOpacity(0.5)),
             ),
-            child: const Icon(Icons.camera_alt,
-                size: 18, color: Color(0xFF1A6FD4)),
+            child: Icon(
+              Icons.camera_alt,
+              size: 18,
+              color: theme.colorScheme.primary,
+            ),
           ),
         ),
       ],
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: Stack(
         children: [
           CustomScrollView(
@@ -308,45 +341,70 @@ Future<void> _confirmSignOut() async {
               SliverAppBar(
                 expandedHeight: 220,
                 pinned: true,
+                backgroundColor: isDark ? theme.cardColor : const Color(0xFF1A6FD4),
+                foregroundColor: theme.appBarTheme.foregroundColor,
                 flexibleSpace: FlexibleSpaceBar(
                   background: Container(
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [Color(0xFF1A6FD4), Color(0xFF2196F3)],
+                    decoration: isDark
+                        ? BoxDecoration(
+                            color: theme.cardColor,
+                          )
+                        : const BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Color(0xFF1A6FD4),
+                                Color(0xFF2196F3),
+                              ],
+                              ),
+                            ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const SizedBox(height: 40),
+                            _isPhotoLoading
+                                ? CircularProgressIndicator(
+                                    color: isDark ? theme.colorScheme.onSurface : Colors.white,
+                                  )
+                                : _buildAvatar(),
+                            const SizedBox(height: 8),
+                            TextButton.icon(
+                              onPressed: _isLoading ? null : _pickAndUploadPhoto,
+                              icon: Icon(
+                                Icons.edit,
+                                size: 14,
+                                color: isDark
+                                    ? theme.colorScheme.onSurface.withOpacity(0.8)
+                                    : Colors.white70,
+                              ),
+                              label: Text(
+                                'Change Picture',
+                                style: TextStyle(
+                                  color: isDark
+                                      ? theme.colorScheme.onSurface.withOpacity(0.8)
+                                      : Colors.white70,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const SizedBox(height: 40),
-                        _isPhotoLoading
-                            ? const CircularProgressIndicator(
-                                color: Colors.white)
-                            : _buildAvatar(),
-                        const SizedBox(height: 8),
-                        TextButton.icon(
-                          onPressed: _isLoading ? null : _pickAndUploadPhoto,
-                          icon: const Icon(Icons.edit,
-                              size: 14, color: Colors.white70),
-                          label: const Text('Change Picture',
-                              style: TextStyle(color: Colors.white70)),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
                 leading: IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  icon: Icon(
+                    Icons.arrow_back,
+                    color: theme.appBarTheme.foregroundColor,
+                  ),
                   onPressed: () => Navigator.pop(context),
                 ),
-                backgroundColor: const Color(0xFF1A6FD4),
-                title: const Text('Edit Profile',
-                    style: TextStyle(color: Colors.white)),
+                title: Text(
+                  'Edit Profile',
+                  style: TextStyle(
+                    color: theme.appBarTheme.foregroundColor,
+                  ),
+                ),
               ),
-
-              // ── Form body ──
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.all(20),
@@ -366,19 +424,21 @@ Future<void> _confirmSignOut() async {
                         keyboardType: TextInputType.emailAddress,
                       ),
                       const SizedBox(height: 24),
-
                       OutlinedButton.icon(
                         onPressed: _isLoading ? null : _sendPasswordResetEmail,
-                        icon: const Icon(Icons.lock_outline, color: Color(0xFF1A6FD4)),
-                        label: const Text(
+                        icon: Icon(
+                          Icons.lock_outline,
+                          color: theme.colorScheme.primary,
+                        ),
+                        label: Text(
                           'Reset Password',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF1A6FD4),
+                            color: theme.colorScheme.primary,
                           ),
                         ),
                         style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Color(0xFF1A6FD4)),
+                          side: BorderSide(color: theme.colorScheme.primary),
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -386,11 +446,10 @@ Future<void> _confirmSignOut() async {
                         ),
                       ),
                       const SizedBox(height: 16),
-
                       ElevatedButton(
                         onPressed: _isLoading ? null : _onSubmit,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1A6FD4),
+                          backgroundColor: theme.colorScheme.primary,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
@@ -402,9 +461,7 @@ Future<void> _confirmSignOut() async {
                           style: TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ),
-
                       const SizedBox(height: 40),
-
                       Center(
                         child: TextButton.icon(
                           onPressed: _isLoading ? null : _confirmSignOut,
@@ -424,13 +481,13 @@ Future<void> _confirmSignOut() async {
               ),
             ],
           ),
-
-          // Global loading overlay
           if (_isLoading)
             Container(
               color: Colors.black26,
-              child: const Center(
-                child: CircularProgressIndicator(color: Color(0xFF1A6FD4)),
+              child: Center(
+                child: CircularProgressIndicator(
+                  color: theme.colorScheme.primary,
+                ),
               ),
             ),
         ],
@@ -454,26 +511,32 @@ class _ProfileTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
+      style: TextStyle(color: theme.colorScheme.onSurface),
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: Icon(icon, color: const Color(0xFF1A6FD4)),
+        labelStyle: TextStyle(color: theme.textTheme.bodyMedium?.color),
+        prefixIcon: Icon(icon, color: theme.colorScheme.primary),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: theme.cardColor,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade200),
+          borderSide: BorderSide(color: theme.dividerColor),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:
-              const BorderSide(color: Color(0xFF1A6FD4), width: 1.5),
+          borderSide: BorderSide(
+            color: theme.colorScheme.primary,
+            width: 1.5,
+          ),
         ),
       ),
     );

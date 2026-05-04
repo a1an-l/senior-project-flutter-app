@@ -55,7 +55,14 @@ class _HomeMapPageState extends State<HomeMapPage> {
   Set<Marker> markers = {};
   Set<Polyline> polylines = {};
 
-  bool _darkMapEnabled = false;
+  Color get _surfaceColor => Theme.of(context).cardColor;
+  Color get _primaryColor => Theme.of(context).colorScheme.primary;
+  Color get _onSurfaceColor => Theme.of(context).colorScheme.onSurface;
+  Color get _dividerColor => Theme.of(context).dividerColor;
+  Color get _subtleTextColor =>
+  Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey;
+
+  
 
   static const String _darkMapStyle = '''
 [
@@ -89,29 +96,25 @@ class _HomeMapPageState extends State<HomeMapPage> {
 ''';
 
   //dark mode
-  Future<void> _loadMapThemeSetting() async {
-  final prefs = await SharedPreferences.getInstance();
-  final enabled = prefs.getBool('dark_map_enabled') ?? false;
+  Future<void> _applyMapStyle() async {
+    if (controller == null || !mounted) return;
 
-  if (!mounted) return;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-  setState(() {
-    _darkMapEnabled = enabled;
-  });
-
-  await _applyMapStyle();
-}
-
-Future<void> _applyMapStyle() async {
-  if (controller == null) return;
-
-  if (_darkMapEnabled) {
-    await controller!.setMapStyle(_darkMapStyle);
-  } else {
-    await controller!.setMapStyle(null);
+    if (isDark) {
+      await controller!.setMapStyle(_darkMapStyle);
+    } else {
+      await controller!.setMapStyle(null);
+    }
   }
-}
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _applyMapStyle();
+    });
+  }
 
 
   // --- Route Tracking & History Variables ---
@@ -184,7 +187,6 @@ Future<void> _applyMapStyle() async {
     _loadRecentSearches();
     _refreshUnread();
     _loadTrafficToggle();
-    _loadMapThemeSetting();
     searchController.addListener(_onSearchChanged);
     searchFocusNode.addListener(() {
       if (mounted) {
@@ -1091,7 +1093,7 @@ Future<void> _applyMapStyle() async {
       key: scaffoldKey,
       drawer: AppDrawer(
         onSettingsClosed: () async {
-          await _loadMapThemeSetting();
+           await _applyMapStyle();
         },
         onOpenTrafficSettings: () async {
           await Navigator.push(
@@ -1105,8 +1107,8 @@ Future<void> _applyMapStyle() async {
       ),
 
       appBar: AppBar(
-        backgroundColor: const Color(0xFF2F5CE5),
-        foregroundColor: Colors.white,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
+        foregroundColor: Theme.of(context).appBarTheme.foregroundColor,
         leading: IconButton(
           icon: const Icon(Icons.menu),
           onPressed: () => scaffoldKey.currentState?.openDrawer(),
@@ -1136,7 +1138,7 @@ Future<void> _applyMapStyle() async {
               onTap: (_) => FocusScope.of(context).unfocus(),
               onMapCreated: (value) async  {
                 controller = value;
-                await _loadMapThemeSetting();
+                await _applyMapStyle();
 
                 if (myLocationEnabled) _initLocation();
               },
@@ -1149,7 +1151,7 @@ Future<void> _applyMapStyle() async {
               right: 16,
               child: FloatingActionButton(
                 heroTag: "recenter_btn",
-                backgroundColor: Colors.white,
+                backgroundColor: _surfaceColor,
                 mini: true,
                 onPressed: () {
                   setState(() => followUser = true);
@@ -1176,7 +1178,7 @@ Future<void> _applyMapStyle() async {
                     }
                   }
                 },
-                child: const Icon(Icons.my_location, color: Color(0xFF2F5CE5)),
+                child: Icon(Icons.my_location, color: _primaryColor),
               ),
             ),
 
@@ -1228,7 +1230,7 @@ Future<void> _applyMapStyle() async {
                 Container(
                   height: 42,
                   decoration: BoxDecoration(
-                    color: Colors.white, borderRadius: BorderRadius.circular(22), border: Border.all(color: const Color(0xFFE5E5E5)),
+                    color: _surfaceColor, borderRadius: BorderRadius.circular(22), border: Border.all(color: _dividerColor ),
                     boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 10, offset: Offset(0, 6))],
                   ),
                   child: Row(
@@ -1259,7 +1261,12 @@ Future<void> _applyMapStyle() async {
                               });
                             }
                           },
-                          decoration: const InputDecoration(hintText: 'Search', border: InputBorder.none, isDense: true),
+                          decoration: InputDecoration(
+                            hintText: 'Search',
+                            hintStyle: TextStyle(color: _subtleTextColor),
+                            border: InputBorder.none,
+                            isDense: true,
+                          ),
                         ),
                       ),
                       if (searching)
@@ -1286,7 +1293,7 @@ Future<void> _applyMapStyle() async {
                   Container(
                     margin: const EdgeInsets.only(top: 8),
                     decoration: BoxDecoration(
-                      color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE5E5E5)),
+                      color: _surfaceColor, borderRadius: BorderRadius.circular(16), border: Border.all(color: _dividerColor),
                       boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 10, offset: Offset(0, 6))],
                     ),
                     child: Column(
@@ -1336,7 +1343,7 @@ Future<void> _applyMapStyle() async {
                   child: Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFE5E5E5)),
+                      color: _surfaceColor, borderRadius: BorderRadius.circular(14), border: Border.all(color: _dividerColor),
                       boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 12, offset: Offset(0, 8))],
                     ),
                     child: Row(
@@ -1472,16 +1479,37 @@ Future<void> _applyMapStyle() async {
 }
 
 class _TopChip extends StatelessWidget {
-  const _TopChip({required this.label, required this.icon, required this.onPressed});
+  const _TopChip({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+  });
+
   final String label;
   final IconData icon;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return OutlinedButton.icon(
-      onPressed: onPressed, icon: Icon(icon, size: 18), label: Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-      style: OutlinedButton.styleFrom(foregroundColor: Colors.black87, backgroundColor: Colors.white, side: const BorderSide(color: Color(0xFFE5E5E5)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)), padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10), minimumSize: const Size(0, 38)),
+      onPressed: onPressed,
+      icon: Icon(icon, size: 18),
+      label: Text(
+        label,
+        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+      ),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: theme.colorScheme.onSurface,
+        backgroundColor: theme.cardColor,
+        side: BorderSide(color: theme.dividerColor),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        minimumSize: const Size(0, 38),
+      ),
     );
   }
 }
@@ -1495,7 +1523,9 @@ class _BottomItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color color = selected ? const Color(0xFF2F5CE5) : const Color(0xFF8A8A8A);
+      final theme = Theme.of(context);
+      final Color color = selected ? theme.colorScheme.primary : (theme.textTheme.bodySmall?.color ?? Colors.grey);
+
     return TextButton(
       onPressed: onPressed, style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(64, 48), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
       child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(icon, color: color), const SizedBox(height: 2), Text(label, style: TextStyle(fontSize: 11, color: color))]),
@@ -1517,7 +1547,9 @@ class _RouteInfoRow extends StatelessWidget {
     final bool hasTrafficDelay = durationSeconds != null && durationTrafficSeconds != null && durationTrafficSeconds > durationSeconds;
     final parts = <Widget>[];
 
-    if (distance != null && distance.isNotEmpty) parts.add(_pill(text: distance, color: const Color(0xFFF4F4F4), textColor: Colors.black87));
+    if (distance != null && distance.isNotEmpty) {parts.add(_pill(text: distance, color: Theme.of(context).brightness == Brightness.dark
+        ? const Color(0xFF2A2A2A)
+        : const Color(0xFFF4F4F4), textColor: Theme.of(context).colorScheme.onSurface));}
     final effectiveDuration = (durationTraffic != null && durationTraffic.isNotEmpty) ? durationTraffic : duration;
     if (effectiveDuration != null && effectiveDuration.isNotEmpty) parts.add(_pill(text: effectiveDuration, color: hasTrafficDelay ? const Color(0xFFFFEBEE) : const Color(0xFFEAF1FF), textColor: hasTrafficDelay ? const Color(0xFFC62828) : const Color(0xFF2F5CE5)));
 
@@ -1558,9 +1590,9 @@ class _NavigationBanner extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 16),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE5E5E5)),
+          border: Border.all(color: Theme.of(context).dividerColor),
         ),
         child: Row(
           children: [

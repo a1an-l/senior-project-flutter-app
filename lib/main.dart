@@ -11,7 +11,6 @@ import 'services/background_tasks.dart';
 import 'services/notification_service.dart';
 import 'screens/home_map_page.dart';
 
-
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
@@ -32,21 +31,24 @@ void main() async {
     debugPrint('Supabase initialization error: $e');
   }
 
-  // Initialize background traffic service asynchronously (non-blocking)
   print('[App] Initializing background traffic service...');
-  unawaited(BackgroundTrafficService.initialize().then((_) {
-    print('[App] Background traffic service initialized successfully');
-  }).catchError((e) {
-    print('[App] Error initializing background traffic service: $e');
-  }));
-  
+  unawaited(
+    BackgroundTrafficService.initialize().then((_) {
+      print('[App] Background traffic service initialized successfully');
+    }).catchError((e) {
+      print('[App] Error initializing background traffic service: $e');
+    }),
+  );
+
   runApp(const MyApp());
 }
 
-
-
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  static _MyAppState? of(BuildContext context) {
+    return context.findAncestorStateOfType<_MyAppState>();
+  }
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -54,10 +56,12 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   StreamSubscription<AuthState>? _authSub;
+  ThemeMode _themeMode = ThemeMode.light;
 
   @override
   void initState() {
     super.initState();
+    _loadThemeMode();
 
     _authSub = Supabase.instance.client.auth.onAuthStateChange.listen(
       (data) {
@@ -77,6 +81,60 @@ class _MyAppState extends State<MyApp> {
     );
   }
 
+  Future<void> _loadThemeMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final isDark = prefs.getBool('dark_mode') ?? false;
+
+    if (!mounted) return;
+    setState(() {
+      _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
+    });
+  }
+
+  Future<void> setDarkMode(bool isDark) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('dark_mode', isDark);
+
+    if (!mounted) return;
+    setState(() {
+      _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
+    });
+  }
+
+  ThemeData _lightTheme() {
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.light,
+      scaffoldBackgroundColor: const Color(0xFFF5F5F5),
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: const Color(0xFF1A6FD4),
+        brightness: Brightness.light,
+      ),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Color(0xFF1A6FD4),
+        foregroundColor: Colors.white,
+      ),
+      cardColor: Colors.white,
+    );
+  }
+
+  ThemeData _darkTheme() {
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      scaffoldBackgroundColor: const Color(0xFF121212),
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: const Color(0xFF1A6FD4),
+        brightness: Brightness.dark,
+      ),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Color(0xFF1E1E1E),
+        foregroundColor: Colors.white,
+      ),
+      cardColor: const Color(0xFF1E1E1E),
+    );
+  }
+
   @override
   void dispose() {
     _authSub?.cancel();
@@ -88,6 +146,9 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       navigatorKey: appNavigatorKey,
       debugShowCheckedModeBanner: false,
+      theme: _lightTheme(),
+      darkTheme: _darkTheme(),
+      themeMode: _themeMode,
       home: const _StartupGate(),
     );
   }
@@ -149,14 +210,3 @@ class _StartupGate extends StatelessWidget {
     );
   }
 }
-// class MyApp extends StatelessWidget {
-//   const MyApp({super.key});
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return const MaterialApp(
-//       debugShowCheckedModeBanner: false,
-//       home: LandingPage(),
-//     );
-//   }
-//}
