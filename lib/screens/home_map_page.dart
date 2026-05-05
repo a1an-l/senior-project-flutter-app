@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:senior_project_flutter_app/screens/add_address_page.dart';
 import 'app_drawer.dart';
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/api_keys.dart';
 import '../services/google_places_directions_service.dart';
@@ -51,6 +53,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
   DirectionsResult? selectedDirections;
   List<String> recentSearches = [];
   bool searchExpanded = false;
+  List<Map<String, dynamic>> savedAddressChips = [];
 
   Set<Marker> markers = {};
   Set<Polyline> polylines = {};
@@ -186,6 +189,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
     _loadRecentSearches();
     _refreshUnread();
     _loadTrafficToggle();
+    _loadSavedAddressChips();
     searchController.addListener(_onSearchChanged);
     searchFocusNode.addListener(() {
       if (mounted) {
@@ -202,6 +206,37 @@ class _HomeMapPageState extends State<HomeMapPage> {
       return;
     }
     setState(() => hasUnreadNotifications = hasUnread);
+  }
+
+  Future<void> _loadSavedAddressChips() async {
+    final prefs = await SharedPreferences.getInstance();
+    final int? userId = prefs.getInt('user_id');
+    if (userId == null) return;
+
+    final rows = await Supabase.instance.client
+        .from('addressDB')
+        .select()
+        .eq('user_id', userId);
+
+    if (!mounted) return;
+
+    setState(() {
+      savedAddressChips = List<Map<String, dynamic>>.from(rows);
+    });
+  }
+  IconData _iconForSavedChip(String label) {
+    switch (label.toLowerCase()) {
+      case 'home':
+        return Icons.home_outlined;
+      case 'work':
+        return Icons.work_outline;
+      case 'school':
+        return Icons.edit_outlined;
+      case 'gym':
+        return Icons.fitness_center_outlined;
+      default:
+        return Icons.location_on_outlined;
+    }
   }
 
   Future<void> _loadApiKey() async {
@@ -1192,33 +1227,59 @@ class _HomeMapPageState extends State<HomeMapPage> {
               ),
             ),
 
-          SafeArea(
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _TopChip(label: 'Home', icon: Icons.home_outlined, onPressed: () => _routeToSavedLabel('Home')),
-                    const SizedBox(width: 8),
-                    _TopChip(label: 'Work', icon: Icons.work_outline, onPressed: () => _routeToSavedLabel('Work')),
-                    const SizedBox(width: 8),
-                    _TopChip(
-                      label: 'New', icon: Icons.add,
-                      onPressed: () {
-                        setState(() => searchExpanded = true);
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          if (mounted) FocusScope.of(context).requestFocus(searchFocusNode);
-                        });
+         SafeArea(
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: SizedBox(
+                height: 42,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: savedAddressChips.length + 1,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (context, index) {
+                    if (index == savedAddressChips.length) {
+                      return _TopChip(
+                        label: 'New',
+                        icon: Icons.add,
+                        onPressed: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => AddAddressPage())
+                          );
+
+                          await _loadSavedAddressChips();
+                        },
+                      );
+                    }
+
+                    final row = savedAddressChips[index];
+                    final label = (row['label'] ?? 'Saved').toString();
+                    final address = (row['address'] ?? '').toString();
+
+                    return _TopChip(
+                      label: label,
+                      icon: _iconForSavedChip(label),
+                      onPressed: () async {
+                        if (address.trim().isEmpty) return;
+
+                        // Keeps same route-building behavior by using your existing search flow.
+                        await _selectRecentSearch(address);
+
+                        // Add this only if you want tapping the chip to immediately start navigation.
+                        if (selectedDirections != null && mounted) {
+                          await _startInAppNavigation();
+                        }
                       },
-                    ),
-                  ],
+                    );
+                  },
                 ),
               ),
             ),
           ),
+        ),
 
           Positioned(
             left: 16, right: 16,
