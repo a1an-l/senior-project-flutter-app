@@ -1181,7 +1181,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
 
           if (!followUser)
             Positioned(
-              top: 12,
+              bottom: 12,
               right: 16,
               child: FloatingActionButton(
                 heroTag: "recenter_btn",
@@ -1249,7 +1249,6 @@ class _HomeMapPageState extends State<HomeMapPage> {
                             context,
                             MaterialPageRoute(builder: (_) => AddAddressPage())
                           );
-
                           await _loadSavedAddressChips();
                         },
                       );
