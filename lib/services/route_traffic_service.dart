@@ -357,7 +357,7 @@ class RouteTrafficService {
         return {'detected': false, 'message': 'No historical average available for "$label".'};
       }
 
-      const thresholdPct = 0.20;
+      const thresholdPct = 0.05;
       final thresholdSeconds = (avgSeconds * thresholdPct).round();
       if (trafficSeconds > avgSeconds + thresholdSeconds) {
         final deltaMinutes = ((trafficSeconds - avgSeconds) / 60).round();
